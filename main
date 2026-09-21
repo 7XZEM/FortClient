@@ -467,85 +467,111 @@ ClientFramework.Modules.KillFeed = function()
 	FeedAspect.AspectRatio = 6.617
 	FeedAspect.Parent = MainFrame
 
-	local function CreateFeed(Feed: IntValue, Parent: Instance)
-		if Feed then
+local function CreateFeed(Feed: IntValue, Parent: Instance)
+	if Feed then
+		local FeedFrame = Instance.new("Frame")
+		FeedFrame.Name = Feed.Name
+		FeedFrame.Size = UDim2.new(1, 0, 0.5, 0)
+		FeedFrame.BackgroundTransparency = 0.5
+		FeedFrame.BackgroundColor3 = Color3.fromRGB(8, 36, 102)
+		FeedFrame.BorderSizePixel = 0
+		FeedFrame.ZIndex = 1
+		FeedFrame.Parent = MainFrame
 
-			local Color3Value: Color3Value
+		local InnerShadow = Instance.new("UIShadow")
+		InnerShadow.BlurRadius = UDim.new(0.1, 0)
+		InnerShadow.Color = FeedFrame.BackgroundColor3
+		InnerShadow.Transparency = 1
+		InnerShadow.Name = "InnerShadow"
+		InnerShadow.Parent = FeedFrame
 
-			local FeedFrame = Instance.new("Frame")
-			FeedFrame.Name = Feed.Name
-			FeedFrame.Size = UDim2.new(1, 0, 0.5, 0)
-			FeedFrame.BackgroundTransparency = 0.5
-			FeedFrame.BackgroundColor3 = Color3.fromRGB(8, 36, 102)
-			FeedFrame.BorderSizePixel = 0
-			FeedFrame.ZIndex = 1
-			FeedFrame.Parent = MainFrame
+		local OuterShadow = Instance.new("UIShadow")
+		OuterShadow.BlurRadius = UDim.new(1, 0)
+		OuterShadow.Color = Color3.new(0, 0, 0)
+		OuterShadow.Spread = UDim2.new(0.1, 0, 0.1, 0)
+		OuterShadow.Transparency = 1
+		OuterShadow.Name = "OuterShadow"
+		OuterShadow.Parent = FeedFrame
 
-			local InnerShadow = Instance.new("UIShadow")
-			InnerShadow.BlurRadius = UDim.new(0.1, 0)
-			InnerShadow.Color = FeedFrame.BackgroundColor3
-			InnerShadow.Transparency = 1
-			InnerShadow.Name = "InnerShadow"
-			InnerShadow.Parent = FeedFrame
+		local Gradient = Instance.new("UIGradient")
+		Gradient.Name = "Gradient"
+		Gradient.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(150, 150, 150)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))
+		})
+		Gradient.Parent = FeedFrame
+		Gradient.Rotation = 90
 
-			local OuterShadow = Instance.new("UIShadow")
-			OuterShadow.BlurRadius = UDim.new(1, 0)
-			OuterShadow.Color = Color3.new(0, 0, 0)
-			OuterShadow.Spread = UDim2.new(0.1, 0,0.1, 0)
-			OuterShadow.Transparency = 1
-			OuterShadow.Name = "OuterShadow"
-			OuterShadow.Parent = FeedFrame
+		local FeedLabel = Instance.new("TextLabel")
+		FeedLabel.BackgroundTransparency = 1
+		FeedLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+		FeedLabel.Position = UDim2.new(0.5, 0, 0.5, 0)
+		FeedLabel.Size = UDim2.new(0.95, 0, 0.95, 0)
+		FeedLabel.ZIndex = 2
+		FeedLabel.Font = Enum.Font.LuckiestGuy
+		FeedLabel.TextScaled = true
+		FeedLabel.TextTransparency = 1
+		FeedLabel.TextStrokeTransparency = 1
+		FeedLabel.TextXAlignment = Enum.TextXAlignment.Left
+		FeedLabel.TextYAlignment = Enum.TextYAlignment.Bottom
+		FeedLabel.RichText = true
+		FeedLabel.Parent = FeedFrame
 
-			local Gradient = Instance.new("UIGradient")
-			Gradient.Name = "Gradient"
-			Gradient.Color = ColorSequence.new({
-				ColorSequenceKeypoint.new(0, Color3.fromRGB(150, 150, 150)),
-				ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))
-			})
-			Gradient.Parent = FeedFrame
-			Gradient.Rotation = 90
-
-			local FeedLabel = Instance.new("TextLabel")
-			FeedLabel.BackgroundTransparency = 1
-			FeedLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-			FeedLabel.Position = UDim2.new(0.5, 0 , 0.5, 0)
-			FeedLabel.Size = UDim2.new(0.95, 0, 0.95, 0)
-			FeedLabel.ZIndex = 2
-
-			FeedLabel.Text = Feed.Name
-			FeedLabel.Font = Enum.Font.LuckiestGuy
-			FeedLabel.TextScaled = true
-			FeedLabel.TextTransparency = 1
-			FeedLabel.TextStrokeTransparency = 1
-			FeedLabel.TextXAlignment = Enum.TextXAlignment.Left
-			FeedLabel.TextYAlignment = Enum.TextYAlignment.Bottom
-			FeedLabel.Parent = FeedFrame
-
-			if Feed:FindFirstChild("TColor")  then
-				Color3Value = Feed:FindFirstChild("TColor") :: Color3Value
-				FeedLabel.TextColor3 = Color3Value.Value
-			else
-				FeedLabel.TextColor3 = Color3.fromRGB(255, 64, 0)
-			end
-
-			local Info = TweenInfo.new(0.75, Enum.EasingStyle.Sine)
-
-			TweenService:Create(FeedFrame, Info, {BackgroundTransparency = 0.5}):Play()
-			TweenService:Create(FeedLabel, Info, {TextTransparency = 0}):Play()
-			TweenService:Create(InnerShadow, Info, {Transparency = 0.5}):Play()
-			TweenService:Create(OuterShadow, Info, {Transparency = 0.3}):Play()
-			task.wait(5)
-			TweenService:Create(FeedFrame, Info, {BackgroundTransparency = 1}):Play()
-			TweenService:Create(FeedLabel, Info, {TextTransparency = 1}):Play()
-			TweenService:Create(InnerShadow, Info, {Transparency = 1}):Play()
-			TweenService:Create(OuterShadow, Info, {Transparency = 1}):Play()
-			task.wait(1)
-			FeedLabel.Visible = false
-
-			Debris:AddItem(FeedFrame, 3)
+		local function toHex(c: Color3)
+			return string.format("rgb(%d,%d,%d)", math.floor(c.R * 255), math.floor(c.G * 255), math.floor(c.B * 255))
 		end
-	end
 
+		local function GetColorFromAnyName(nameStr: string)
+			local cleanName = string.lower(nameStr)
+			for _, p in ipairs(Players:GetPlayers()) do
+				if string.lower(p.DisplayName) == cleanName or string.lower(p.Name) == cleanName then
+					if p.TeamColor then
+						return p.TeamColor.Color
+					end
+				end
+			end
+		   return Color3.fromRGB(255, 64, 0)
+		end
+
+		local rawText = Feed.Name
+		
+		local killerDisplay, killerUser, action, victimText, weapon = string.match(rawText, "^(.-)%s*%(%@([%w_]+)%)%s+(%a+)%s+([%w_]+)%s+(.*)$")
+
+		if killerUser and victimText then
+			local killerColor = GetColorFromAnyName(killerUser)
+			local victimColor = GetColorFromAnyName(victimText)
+
+			local formattedKiller = string.format("%s (@%s)", killerDisplay, killerUser)
+
+			FeedLabel.Text = string.format(
+				'<font color="%s">%s</font> <font color="rgb(255,255,255)">%s</font> <font color="%s">%s</font> <font color="rgb(255,255,255)">%s</font>',
+				toHex(killerColor), formattedKiller,
+				action,
+				toHex(victimColor), victimText,
+				weapon
+			)
+		else
+			FeedLabel.Text = string.format('<font color="rgb(255,255,255)">%s</font>', rawText)
+		end
+
+		local Info = TweenInfo.new(0.75, Enum.EasingStyle.Sine)
+
+		TweenService:Create(FeedFrame, Info, {BackgroundTransparency = 0.5}):Play()
+		TweenService:Create(FeedLabel, Info, {TextTransparency = 0}):Play()
+		TweenService:Create(InnerShadow, Info, {Transparency = 0.5}):Play()
+		TweenService:Create(OuterShadow, Info, {Transparency = 0.3}):Play()
+		task.wait(5)
+		TweenService:Create(FeedFrame, Info, {BackgroundTransparency = 1}):Play()
+		TweenService:Create(FeedLabel, Info, {TextTransparency = 1}):Play()
+		TweenService:Create(InnerShadow, Info, {Transparency = 1}):Play()
+		TweenService:Create(OuterShadow, Info, {Transparency = 1}):Play()
+		task.wait(1)
+		FeedLabel.Visible = false
+
+		Debris:AddItem(FeedFrame, 3)
+	end
+end
+	
 	local FeedConnection = GlobalFeed.ChildAdded:Connect(function(child: Instance)
 		if child:IsA("IntValue") then
 			CreateFeed(child, MainFrame)
