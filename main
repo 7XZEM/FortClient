@@ -2734,6 +2734,140 @@ ClientFramework.Modules.EmoteWheel = function()
 	end
 end
 
+ClientFramework.Modules.LightingEngine = function()
+	local Lighting = game:GetService("Lighting")
+	local Workspace = game:GetService("Workspace")
+	local TweenService = game:GetService("TweenService")
+	local RunService = game:GetService("RunService")
+
+	local Terrain = Workspace:WaitForChild("Terrain") :: Terrain
+
+	local LightingPreset = {
+		LightingStyle = Enum.LightingStyle.Realistic,
+
+		Clouds = {
+			Cover = 0.7,
+			Density = 0.3,
+		},
+
+		Sky = {
+			MoonTextureId = "rbxassetid://6444320592",
+			SunTextureId = "rbxassetid://6196665106",
+
+			SkyboxBk = "", SkyboxDn = "", SkyboxFt = "", 
+			SkyboxLf = "", SkyboxRt = "", SkyboxUp = ""
+		},
+
+		Atmosphere = {
+			Density = 0.3,
+			Glare = 0.1,
+			Haze = 0,
+		},
+
+		SunRaysEffect = {
+			Intensity = 0.15,
+			Spread = 1,
+		},
+
+		BloomEffect = {
+			Intensity = 1,
+			Size = 24,
+			Threshold = 2
+		},
+
+		Day = {
+			Ambient = Color3.fromRGB(90, 90, 90),
+			OutdoorAmbient = Color3.fromRGB(50, 50, 50),
+			ColorShift_Top = Color3.fromRGB(178, 180, 36),
+			ColorShift_Bottom = Color3.fromRGB(152, 144, 26),
+			EnvironmentSpecularScale = 0.1,
+			EnvironmentDiffuseScale = 0.5,
+			ExposureCompensation = 0
+		},  
+
+		Night = {
+			Ambient = Color3.fromRGB(30, 30, 30),
+			OutdoorAmbient = Color3.fromRGB(30, 30, 30),
+			ColorShift_Top = Color3.fromRGB(104, 144, 180),
+			ColorShift_Bottom = Color3.fromRGB(152, 144, 26),
+			EnvironmentSpecularScale = 0.1,
+			EnvironmentDiffuseScale = 0.5,
+			ExposureCompensation = -1
+		}
+	}
+
+	local function GetOrCreateInstance(className: string, parent: Instance): Instance
+		local existing = parent:FindFirstChildOfClass(className)
+		if not existing then
+			existing = Instance.new(className)
+			existing.Parent = parent
+		end
+		return existing
+	end
+
+	local cloudsInstance = GetOrCreateInstance("Clouds", Terrain) :: Clouds
+	local skyInstance = GetOrCreateInstance("Sky", Lighting) :: Sky
+	local atmosphereInstance = GetOrCreateInstance("Atmosphere", Lighting) :: Atmosphere
+	local sunRaysInstance = GetOrCreateInstance("SunRaysEffect", Lighting) :: SunRaysEffect
+	local bloomInstance = GetOrCreateInstance("BloomEffect", Lighting) :: BloomEffect
+	
+	task.spawn(function()
+		Lighting.LightingStyle = LightingPreset.LightingStyle
+	end)	
+
+	for prop, val in pairs(LightingPreset.Clouds) do
+		(cloudsInstance :: any)[prop] = val
+	end
+	for prop, val in pairs(LightingPreset.Sky) do
+		(skyInstance :: any)[prop] = val
+	end
+	for prop, val in pairs(LightingPreset.Atmosphere) do
+		(atmosphereInstance :: any)[prop] = val
+	end
+	for prop, val in pairs(LightingPreset.SunRaysEffect) do
+		(sunRaysInstance :: any)[prop] = val
+	end
+	for prop, val in pairs(LightingPreset.BloomEffect) do
+		(bloomInstance :: any)[prop] = val
+	end
+
+	local function ComputeDayNightFactor(clockTime: number): number
+		if clockTime >= 6 and clockTime <= 18 then
+			local distance = math.abs(clockTime - 12)
+			local factor = 1 - (distance / 6)
+			return math.clamp(factor, 0, 1)
+		else
+			return 0
+		end
+	end
+
+	local LightingConnection = RunService.RenderStepped:Connect(function()
+		local timeFactor = ComputeDayNightFactor(Lighting.ClockTime)
+		local dayData = LightingPreset.Day
+		local nightData = LightingPreset.Night
+
+		Lighting.Ambient = nightData.Ambient:Lerp(dayData.Ambient, timeFactor)
+		Lighting.OutdoorAmbient = nightData.OutdoorAmbient:Lerp(dayData.OutdoorAmbient, timeFactor)
+		Lighting.ColorShift_Top = nightData.ColorShift_Top:Lerp(dayData.ColorShift_Top, timeFactor)
+		Lighting.ColorShift_Bottom = nightData.ColorShift_Bottom:Lerp(dayData.ColorShift_Bottom, timeFactor)
+
+		Lighting.EnvironmentSpecularScale = (nightData.EnvironmentSpecularScale * (1 - timeFactor)) + (dayData.EnvironmentSpecularScale * timeFactor)
+		Lighting.EnvironmentDiffuseScale = (nightData.EnvironmentDiffuseScale * (1 - timeFactor)) + (dayData.EnvironmentDiffuseScale * timeFactor)
+		Lighting.ExposureCompensation = (nightData.ExposureCompensation * (1 - timeFactor)) + (dayData.ExposureCompensation * timeFactor)
+	end)
+
+	ClientFramework.ActiveUI.LightingEngine = ClientFramework.ActiveUI.LightingEngine or {}
+	table.insert(ClientFramework.ActiveUI.LightingEngine, LightingConnection)
+	
+
+        while true do
+
+		ClientFramework.Heartbeats.LightingEngine = os.clock()
+		task.wait(1)
+	end
+	 
+end
+
 
 warn("[FortClient] Deploying threads...")
 for moduleName, _ in pairs(ClientFramework.Modules) do
