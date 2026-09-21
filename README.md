@@ -13,7 +13,12 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/7XZEM/FortClient/main
 ```
 
 DEPENDENCIES
-You must copy the content of the Sounds folder and paste it into the Roblox content\sounds folder for the client to be able to use custom weapon sounds.
+
+This client uses custom sounds for multiple features, For them to play: 
+
+You need to Extract the Sounds.rar from the release.
+
+Then you need copy the content of the folder and paste it into the Roblox content\sounds folder, however when roblox update, it will wipe modded assets, so it is recommended you instead use bloxtrap or fishtrap mods feature, as these will be persistent.
 
 Once these steps are done you should be good to go.
 
