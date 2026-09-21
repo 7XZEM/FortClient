@@ -1,0 +1,2731 @@
+
+task.wait(5)
+local Workspace = game:GetService("Workspace")
+local Camera = workspace.CurrentCamera :: Camera
+local StarterGui = game:GetService("StarterGui")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer :: Player
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
+local TextChatService = game:GetService("TextChatService")
+local GuiService = game:GetService("GuiService")
+local Debris = game:GetService("Debris")
+local Player = Players.LocalPlayer :: Player
+
+local ClientFramework = {
+	_version = "2.0.0",
+	Modules = {} :: { [string]: () -> () },
+	Heartbeats = {} :: { [string]: number },
+	ActiveUI = {} :: { [string]: { any } }
+}
+
+local GlobalSettings = {
+	ModdedWeapons = true,
+	Speedboost = true,
+	FovBoost = false,
+	ESP = false,
+	DoorsDisabled = false,
+	DisableAntiJump = true,
+	AntiFling = false,
+	UIShadowsEnabled = false
+}
+
+local weaponSettings = {
+	["AK-47"] = {
+		["FireRate"] = 0.093,
+		["SpreadRadius"] = 0,
+		["AccurateRange"] = 1400,
+		["ShootSoundId"] = "rbxasset://sounds/AK_Shoot1.mp3",
+		["ReloadSoundId"] = "rbxasset://sounds/SMG_Reload.mp3"
+	},
+	["FAL"] = {
+		["FireRate"] = 0.084,
+		["SpreadRadius"] = 0,
+		["AccurateRange"] = 1400,
+		["MinDistance"] = 250,
+		["MaxDistance"] = 3500,
+		["MidStart"] = 200,
+		["FarStart"] = 400,
+		["ShootSoundId"] = {
+			["Near"] = "rbxasset://sounds/FAL/Fal_Close_01.ogg",
+			["Mid"] = "rbxasset://sounds/FAL/Fal_Medium_01.ogg",
+			["Far"] = "rbxasset://sounds/FAL/Fal_Distant_01.ogg"
+		},
+		["ReloadSoundId"] = "rbxasset://sounds/SMG_Reload.mp3",
+		["EquipSoundId"] = "rbxasset://sounds/FAL/Fal_Equip_01.ogg" 
+	},
+	["Remington 870"] = {
+		["FireRate"] = 0.8,
+		["SpreadRadius"] = 0.005,
+		["AccurateRange"] = 1400,
+		["AutoFire"] = false,
+		["ShootSoundId"] = "rbxasset://sounds/Shotgun_1.mp3",
+		["SecondarySoundId"] = "",
+		["ReloadSoundId"] = "rbxasset://sounds/ShotgunReload.mp3"
+	},
+	["MP5"] = {
+		["FireRate"] = 0.086,
+		["SpreadRadius"] = 0,
+		["AccurateRange"] = 1400,
+		["AutoFire"] = true,
+		["ShootSoundId"] = "rbxasset://sounds/SMG_ShootFixed.ogg",
+		["ReloadSoundId"] = "rbxasset://sounds/SMG_Reload.mp3"
+	},
+	["M700"] = {
+		["FireRate"] = 0.01,
+		["SpreadRadius"] = 0,
+		["AccurateRange"] = 1600,
+		["Range"] = 1600,
+		["AutoFire"] = false,
+		["MinDistance"] = 250,
+		["MaxDistance"] = 3500,
+		["MidStart"] = 250,
+		["FarStart"] = 500,
+		["ShootSoundId"] = {
+			["Near"] = "rbxasset://sounds/Reaper_Sniper_Rifle_Shooting_close_01.ogg",
+			["Mid"] = "rbxasset://sounds/Reaper_Sniper_Rifle_Shooting_Medium_01.ogg",
+			["Far"] = "rbxasset://sounds/Reaper_Sniper_Rifle_Shooting_Distant_01.ogg"
+			--["Near"] = "rbxasset://sounds/Barret_Close1.ogg",
+			--["Mid"] = "rbxasset://sounds/Barret_Medium1.ogg",
+			--["Far"] = "rbxasset://sounds/Barret_Distant1.ogg"
+		},
+		["ReloadSoundId"] = "rbxasset://sounds/Barret_Reload.mp3",
+		["EquipSoundId"] = "rbxasset://sounds/Reaper_Sniper_Rifle_Equip_01.ogg" 
+	},
+	["M4A1"] = {
+		["FireRate"] = 0.09,
+		["SpreadRadius"] = 0,
+		["AccurateRange"] = 1600,
+		["Range"] = 1600,
+		["ShootSoundId"] = "rbxasset://sounds/M4A1_Shoot.mp3",
+		["ReloadSoundId"] = "rbxasset://sounds/M4A1_Reload.mp3"
+	},
+	["M9"] = {
+		["AutoFire"] = true,
+		["FireRate"] = 0.07,
+		["SpreadRadius"] = 0,
+		["AccurateRange"] = 1600,
+		["Range"] = 1600,
+	},
+	["Revolver"] = {
+		["AutoFire"] = true,
+		["FireRate"] = 0.1,
+		["SpreadRadius"] = 0,
+		["AccurateRange"] = 1600,
+		["Range"] = 1600,
+	}
+} :: any
+
+local TIMEOUT_THRESHOLD = 15
+
+local function Destroyer(Table: { any })
+	if not Table then return end
+
+	for i = #Table, 1, -1 do
+		local VALUE = Table[i]
+
+		if typeof(VALUE) == "RBXScriptConnection" then
+			VALUE:Disconnect()
+		elseif typeof(VALUE) == "Instance" then
+			VALUE:Destroy()
+		end
+	end
+
+	table.clear(Table)
+end
+
+local function BootCompoment(moduleName: string)
+	warn("[Watchdog] Initiating: " .. moduleName)
+
+	if ClientFramework.ActiveUI[moduleName] then
+		Destroyer(ClientFramework.ActiveUI[moduleName])
+	else
+		ClientFramework.ActiveUI[moduleName] = {}
+	end
+
+	ClientFramework.Heartbeats[moduleName] = os.clock()
+
+	task.spawn(ClientFramework.Modules[moduleName])
+end
+
+local function RebootComponent(moduleName: string)
+	warn("[Watchdog] Initiating recovery sequence for: " .. moduleName)
+
+	if ClientFramework.ActiveUI[moduleName] then
+		Destroyer(ClientFramework.ActiveUI[moduleName])
+	else
+		ClientFramework.ActiveUI[moduleName] = {}
+	end
+
+	ClientFramework.Heartbeats[moduleName] = os.clock()
+
+	task.spawn(ClientFramework.Modules[moduleName])
+end
+
+ClientFramework.Modules.HealthHUD = function()
+	ClientFramework.ActiveUI.HealthHUD = ClientFramework.ActiveUI.HealthHUD or {}
+	local TrackingRefs = ClientFramework.ActiveUI.HealthHUD
+
+	local MAX_HP = 50
+	local MAX_SHIELD = 50
+	local BG_COLOR = Color3.fromRGB(19, 40, 59)
+	local HP_COLOR = Color3.fromRGB(117, 225, 70)
+	local SHIELD_COLOR = Color3.fromRGB(80, 168, 245)
+	local RIOT_SHIELD_COLOR = Color3.fromRGB(208, 150, 14)
+	local TWEEN_INFO = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	local START_COLOR = Color3.fromRGB(165, 165, 165)
+	local END_COLOR = Color3.fromRGB(255, 255, 255)
+
+	local function CreateProgressBar(name: string, parent: Instance, color: Color3): Frame
+		local Bar = Instance.new("Frame")
+		Bar.Name = name .. "Progress"
+		Bar.Size = UDim2.new(1, 0, 1, 0)
+		Bar.BackgroundColor3 = color
+		Bar.BorderSizePixel = 0
+		Bar.ZIndex = 0
+		Bar.Parent = parent
+
+		local Gradient = Instance.new("UIGradient")
+		Gradient.Name = "Gradient"
+		Gradient.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, START_COLOR),
+			ColorSequenceKeypoint.new(1, END_COLOR)
+		})
+		Gradient.Parent = Bar
+
+		local UiShadow = Instance.new("UIShadow")
+		UiShadow.Transparency = 0
+		UiShadow.Color = Bar.BackgroundColor3
+		UiShadow.BlurRadius = UDim.new(0.5, 0)
+		UiShadow.Spread = UDim2.new(0.025, 0, 0.025, 0)
+		UiShadow.Parent = Bar
+		UiShadow.Enabled = GlobalSettings.UIShadowsEnabled
+
+		return Bar
+	end
+
+	local TargetParent: Instance
+	if gethui then
+		TargetParent = gethui()
+	elseif RunService:IsStudio() then
+		TargetParent = Player:WaitForChild("PlayerGui")
+	else
+		TargetParent = game:GetService("CoreGui")
+	end
+
+	local PlayerGui = Player:WaitForChild("PlayerGui") :: PlayerGui
+
+	local HealthGui = Instance.new("ScreenGui")
+	HealthGui.Name = "HealthGuiClient"
+	HealthGui.ResetOnSpawn = false 
+	HealthGui.Parent = TargetParent
+	table.insert(TrackingRefs, HealthGui)
+
+	local Holder = Instance.new("Frame")
+	Holder.Name = "HealthHolder"
+	Holder.BackgroundTransparency = 1
+	Holder.AnchorPoint = Vector2.new(0, 0.5)
+	Holder.Size = UDim2.new(0.5, 0, 0.085, 0)
+	Holder.Position = UDim2.new(0.05, 0, 0.85, 0)
+	Holder.Parent = HealthGui
+
+	local ShieldFrame = Instance.new("Frame")
+	ShieldFrame.Name = "ShieldFrame"
+	ShieldFrame.BackgroundColor3 = BG_COLOR
+	ShieldFrame.BackgroundTransparency = 0.4
+	ShieldFrame.AnchorPoint = Vector2.new(0.5, 0)
+	ShieldFrame.Size = UDim2.new(1, 0, 0.45, 0)
+	ShieldFrame.BorderSizePixel = 0
+	ShieldFrame.ZIndex = -1
+	ShieldFrame.Parent = Holder
+	ShieldFrame.LayoutOrder = 1
+
+	local HealthFrame = Instance.new("Frame")
+	HealthFrame.Name = "HealthFrame"
+	HealthFrame.BackgroundColor3 = BG_COLOR
+	HealthFrame.BackgroundTransparency = 0.4
+	HealthFrame.AnchorPoint = Vector2.new(0.5, 1)
+	HealthFrame.Size = UDim2.new(1, 0, 0.45, 0)
+	HealthFrame.BorderSizePixel = 0
+	HealthFrame.ZIndex = -1
+	HealthFrame.Parent = Holder
+	HealthFrame.LayoutOrder = 2
+
+	local RiotShieldFrame = Instance.new("Frame")
+	RiotShieldFrame.Name = "RiotShieldFrame"
+	RiotShieldFrame.BackgroundColor3 = BG_COLOR
+	RiotShieldFrame.BackgroundTransparency = 0.4
+	RiotShieldFrame.AnchorPoint = Vector2.new(0.5, 0)
+	RiotShieldFrame.Size = UDim2.new(1, 0, 0.45, 0)
+	RiotShieldFrame.BorderSizePixel = 0
+	RiotShieldFrame.ZIndex = -1
+	RiotShieldFrame.Parent = Holder
+	RiotShieldFrame.LayoutOrder = 0
+	RiotShieldFrame.Visible = false
+
+	local Spacer = Instance.new("Frame")
+	Spacer.Name = "Spacer"
+	Spacer.BackgroundTransparency = 1
+	Spacer.AnchorPoint = Vector2.new(0.5, 0)
+	Spacer.Size = UDim2.new(1, 0, 0.45, 0)
+	Spacer.BorderSizePixel = 0
+	Spacer.ZIndex = -1
+	Spacer.Parent = Holder
+	Spacer.LayoutOrder = 0
+	Spacer.Visible = true
+
+	local RiotShieldProgress = CreateProgressBar("RiotShield", RiotShieldFrame, RIOT_SHIELD_COLOR)
+	local ShieldProgress = CreateProgressBar("Shield", ShieldFrame, SHIELD_COLOR)
+	local HealthProgress = CreateProgressBar("Health", HealthFrame, HP_COLOR)
+
+	local ShieldText = Instance.new("TextLabel")
+	ShieldText.Name = "ShieldText"
+	ShieldText.BackgroundTransparency = 1
+	ShieldText.TextColor3 = Color3.fromRGB(255, 255, 255)
+	ShieldText.AnchorPoint = Vector2.new(0.5, 0.5)
+	ShieldText.Position = UDim2.new(0.5, 0, 0.5, 0)
+	ShieldText.Size = UDim2.new(0.95, 0, 0.85, 0)
+	ShieldText.TextScaled = true
+	ShieldText.Font = Enum.Font.ArimoBold
+	ShieldText.TextXAlignment = Enum.TextXAlignment.Left
+	ShieldText.ZIndex = 2
+	ShieldText.Parent = ShieldFrame
+
+	local RiotShieldText = Instance.new("TextLabel")
+	RiotShieldText.Name = "RiotShieldText"
+	RiotShieldText.BackgroundTransparency = 1
+	RiotShieldText.TextColor3 = Color3.fromRGB(255, 255, 255)
+	RiotShieldText.AnchorPoint = Vector2.new(0.5, 0.5)
+	RiotShieldText.Position = UDim2.new(0.5, 0, 0.5, 0)
+	RiotShieldText.Size = UDim2.new(0.95, 0, 0.85, 0)
+	RiotShieldText.TextScaled = true
+	RiotShieldText.Font = Enum.Font.ArimoBold
+	RiotShieldText.TextXAlignment = Enum.TextXAlignment.Left
+	RiotShieldText.ZIndex = 2
+	RiotShieldText.Parent = RiotShieldFrame
+
+	local HealthText = Instance.new("TextLabel")
+	HealthText.Name = "HealthText"
+	HealthText.BackgroundTransparency = 1
+	HealthText.TextColor3 = Color3.fromRGB(255, 255, 255)
+	HealthText.AnchorPoint = Vector2.new(0.5, 0.5)
+	HealthText.Position = UDim2.new(0.5, 0, 0.5, 0)
+	HealthText.Size = UDim2.new(0.95, 0, 0.85, 0)
+	HealthText.TextScaled = true
+	HealthText.Font = Enum.Font.ArimoBold
+	HealthText.TextXAlignment = Enum.TextXAlignment.Left
+	HealthText.ZIndex = 2
+	HealthText.Parent = HealthFrame
+
+	local ShieldIcon = Instance.new("ImageLabel")
+	ShieldIcon.BackgroundTransparency = 1
+	ShieldIcon.Image = "rbxassetid://102805372822867"
+	ShieldIcon.Position = UDim2.new(-0.085, 0, 0, 0)
+	ShieldIcon.Size = UDim2.new(0.075, 0, 1, 0)
+	ShieldIcon.ZIndex = 3
+	ShieldIcon.Parent = ShieldFrame
+
+	local HealthIcon = Instance.new("ImageLabel")
+	HealthIcon.BackgroundTransparency = 1
+	HealthIcon.Image = "rbxassetid://136567904544031"
+	HealthIcon.Position = UDim2.new(-0.085, 0, 0, 0)
+	HealthIcon.Size = UDim2.new(0.075, 0, 1, 0)
+	HealthIcon.ZIndex = 3
+	HealthIcon.Parent = HealthFrame
+
+	local AspectRatio = Instance.new("UIAspectRatioConstraint")
+	AspectRatio.AspectRatio = 6.617
+	AspectRatio.Parent = Holder
+
+	local UiListlayout = Instance.new("UIListLayout")
+	UiListlayout.FillDirection = Enum.FillDirection.Vertical
+	UiListlayout.SortOrder = Enum.SortOrder.LayoutOrder
+	UiListlayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+	UiListlayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+	UiListlayout.Padding = UDim.new(0.1, 0)
+	UiListlayout.Parent = Holder
+
+	local function FindRiotShield(): Tool?
+		local backpack = Player:FindFirstChild("Backpack")
+		local shield = backpack and backpack:FindFirstChild("Riot Shield")
+
+		if not shield and Player.Character then
+			shield = Player.Character:FindFirstChild("Riot Shield")
+		end
+		return shield :: Tool?
+	end
+
+	local function GetExternalShieldFrame(): Frame?
+		local home = PlayerGui:FindFirstChild("Home")
+		local hud = home and home:FindFirstChild("hud")
+		return (hud and hud:FindFirstChild("ShieldHealthFrame")) :: Frame?
+	end
+
+	local function UpdateBars()
+		local char = Player.Character
+		if not char then return end
+
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
+		if not humanoid or humanoid.Health <= 0 then return end
+
+		local currentHealth = humanoid.Health
+		local displayShield = math.clamp(currentHealth - MAX_HP, 0, MAX_SHIELD)
+		local displayHP = math.clamp(currentHealth, 0, MAX_HP)
+
+		ShieldText.Text = string.format("%d | %d", displayShield, MAX_SHIELD)
+		HealthText.Text = string.format("%d | %d", displayHP, MAX_HP)
+
+		TweenService:Create(ShieldProgress, TWEEN_INFO, { Size = UDim2.new(displayShield / MAX_SHIELD, 0, 1, 0) }):Play()
+		TweenService:Create(HealthProgress, TWEEN_INFO, { Size = UDim2.new(displayHP / MAX_HP, 0, 1, 0) }):Play()
+
+		local riotShield = FindRiotShield()
+		local externalShieldFrame = GetExternalShieldFrame()
+
+		if riotShield then
+			local rshHealth = riotShield:GetAttribute("Health") or 0
+			local rshMaxHealth = riotShield:GetAttribute("MaxHealth") or 100
+
+			if rshMaxHealth <= 0 then rshMaxHealth = 100 end 
+
+			RiotShieldText.Text = string.format("%d | %d", rshHealth, rshMaxHealth)
+
+			if not RiotShieldFrame.Visible then
+				RiotShieldFrame.Visible = true
+				Spacer.Visible = false
+			end
+
+			if externalShieldFrame and externalShieldFrame.Visible then
+				externalShieldFrame.Visible = false
+			end
+
+			TweenService:Create(RiotShieldProgress, TWEEN_INFO, { Size = UDim2.new(math.clamp(rshHealth / rshMaxHealth, 0, 1), 0, 1, 0) }):Play()
+		else
+			if RiotShieldFrame.Visible then
+				RiotShieldFrame.Visible = false
+				Spacer.Visible = true
+			end
+		end
+	end
+
+	game:GetService("StarterGui"):SetCoreGuiEnabled(Enum.CoreGuiType.Health, false)
+
+	local Connection = RunService.Heartbeat:Connect(UpdateBars)
+	table.insert(TrackingRefs, Connection)
+
+	while true do
+
+		ClientFramework.Heartbeats.HealthHUD = os.clock()
+		task.wait(1)
+	end
+end
+
+ClientFramework.Modules.KillFeed = function()
+	ClientFramework.ActiveUI.KillFeed = ClientFramework.ActiveUI.KillFeed or {}
+	local TrackingRefs = ClientFramework.ActiveUI.KillFeed
+
+	local TargetParent: Instance
+	if gethui then
+		TargetParent = gethui()
+	elseif RunService:IsStudio() then
+		TargetParent = Player:WaitForChild("PlayerGui")
+	else
+		TargetParent = game:GetService("CoreGui")
+	end
+
+	local GlobalFeed = ReplicatedStorage:WaitForChild("Killfeed") :: Folder
+
+	local KillfeedGui = Instance.new("ScreenGui") :: ScreenGui
+	KillfeedGui.Name = "GlobalkillFeed"
+	KillfeedGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	KillfeedGui.DisplayOrder = 3
+	KillfeedGui.Parent = TargetParent
+	KillfeedGui.ResetOnSpawn = false
+	table.insert(TrackingRefs, KillfeedGui)
+
+	local MainFrame = Instance.new("Frame")
+	MainFrame.Name = "Holder"
+	MainFrame.Position = UDim2.new(0.05, 0, 0.71, 0)
+	MainFrame.Size = UDim2.new(0.5, 0, 0.085, 0)
+	MainFrame.AnchorPoint = Vector2.new(0, 0.5)
+	MainFrame.BackgroundTransparency = 1
+	MainFrame.BorderSizePixel = 0
+	MainFrame.ZIndex = 1
+	MainFrame.Parent = KillfeedGui
+
+	local UiListlayout = Instance.new("UIListLayout")
+	UiListlayout.FillDirection = Enum.FillDirection.Vertical
+	UiListlayout.SortOrder = Enum.SortOrder.LayoutOrder
+	UiListlayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+	UiListlayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+	UiListlayout.Padding = UDim.new(0.1, 0)
+	UiListlayout.Parent = MainFrame
+
+	local FeedAspect = Instance.new("UIAspectRatioConstraint")
+	FeedAspect.AspectRatio = 6.617
+	FeedAspect.Parent = MainFrame
+
+	local function CreateFeed(Feed: IntValue, Parent: Instance)
+		if Feed then
+
+			local Color3Value: Color3Value
+
+			local FeedFrame = Instance.new("Frame")
+			FeedFrame.Name = Feed.Name
+			FeedFrame.Size = UDim2.new(1, 0, 0.5, 0)
+			FeedFrame.BackgroundTransparency = 0.5
+			FeedFrame.BackgroundColor3 = Color3.fromRGB(8, 36, 102)
+			FeedFrame.BorderSizePixel = 0
+			FeedFrame.ZIndex = 1
+			FeedFrame.Parent = MainFrame
+
+			local InnerShadow = Instance.new("UIShadow")
+			InnerShadow.BlurRadius = UDim.new(0.1, 0)
+			InnerShadow.Color = FeedFrame.BackgroundColor3
+			InnerShadow.Transparency = 1
+			InnerShadow.Name = "InnerShadow"
+			InnerShadow.Parent = FeedFrame
+
+			local OuterShadow = Instance.new("UIShadow")
+			OuterShadow.BlurRadius = UDim.new(1, 0)
+			OuterShadow.Color = Color3.new(0, 0, 0)
+			OuterShadow.Spread = UDim2.new(0.1, 0,0.1, 0)
+			OuterShadow.Transparency = 1
+			OuterShadow.Name = "OuterShadow"
+			OuterShadow.Parent = FeedFrame
+
+			local Gradient = Instance.new("UIGradient")
+			Gradient.Name = "Gradient"
+			Gradient.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(150, 150, 150)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))
+			})
+			Gradient.Parent = FeedFrame
+			Gradient.Rotation = 90
+
+			local FeedLabel = Instance.new("TextLabel")
+			FeedLabel.BackgroundTransparency = 1
+			FeedLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+			FeedLabel.Position = UDim2.new(0.5, 0 , 0.5, 0)
+			FeedLabel.Size = UDim2.new(0.95, 0, 0.95, 0)
+			FeedLabel.ZIndex = 2
+
+			FeedLabel.Text = Feed.Name
+			FeedLabel.Font = Enum.Font.LuckiestGuy
+			FeedLabel.TextScaled = true
+			FeedLabel.TextTransparency = 1
+			FeedLabel.TextStrokeTransparency = 1
+			FeedLabel.TextXAlignment = Enum.TextXAlignment.Left
+			FeedLabel.TextYAlignment = Enum.TextYAlignment.Bottom
+			FeedLabel.Parent = FeedFrame
+
+			if Feed:FindFirstChild("TColor")  then
+				Color3Value = Feed:FindFirstChild("TColor") :: Color3Value
+				FeedLabel.TextColor3 = Color3Value.Value
+			else
+				FeedLabel.TextColor3 = Color3.fromRGB(255, 64, 0)
+			end
+
+			local Info = TweenInfo.new(0.75, Enum.EasingStyle.Sine)
+
+			TweenService:Create(FeedFrame, Info, {BackgroundTransparency = 0.5}):Play()
+			TweenService:Create(FeedLabel, Info, {TextTransparency = 0}):Play()
+			TweenService:Create(InnerShadow, Info, {Transparency = 0.5}):Play()
+			TweenService:Create(OuterShadow, Info, {Transparency = 0.3}):Play()
+			task.wait(5)
+			TweenService:Create(FeedFrame, Info, {BackgroundTransparency = 1}):Play()
+			TweenService:Create(FeedLabel, Info, {TextTransparency = 1}):Play()
+			TweenService:Create(InnerShadow, Info, {Transparency = 1}):Play()
+			TweenService:Create(OuterShadow, Info, {Transparency = 1}):Play()
+			task.wait(1)
+			FeedLabel.Visible = false
+
+			Debris:AddItem(FeedFrame, 3)
+		end
+	end
+
+	local FeedConnection = GlobalFeed.ChildAdded:Connect(function(child: Instance)
+		if child:IsA("IntValue") then
+			CreateFeed(child, MainFrame)
+		end
+	end)
+
+	table.insert(TrackingRefs, FeedConnection)
+
+	while true do
+		ClientFramework.Heartbeats.KillFeed = os.clock()
+		task.wait(1)
+	end
+
+end
+
+ClientFramework.Modules.SettingsMenu = function()
+	ClientFramework.ActiveUI.SettingsMenu = ClientFramework.ActiveUI.SettingsMenu or {}
+	local TrackingRefs: { [number]: any } = ClientFramework.ActiveUI.SettingsMenu :: { [number]: any }
+
+	local Character: Model? = nil
+	local Humanoid: Humanoid? = nil
+	local TargetParent: Instance
+
+	local Doors = workspace:WaitForChild("Doors") :: Folder
+
+	if gethui then
+		TargetParent = gethui()
+	elseif RunService:IsStudio() then
+		TargetParent = Player:WaitForChild("PlayerGui")
+	else
+		TargetParent = game:GetService("CoreGui")
+	end
+
+	local SettingsGui = Instance.new("ScreenGui")
+	SettingsGui.Name = "SettingsClientUI"
+	SettingsGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	SettingsGui.DisplayOrder = 4
+	SettingsGui.Parent = TargetParent
+	SettingsGui.ResetOnSpawn = false
+	table.insert(TrackingRefs, SettingsGui)
+
+	local MainFrame = Instance.new("Frame")
+	MainFrame.Name = "MainSettingsFrame"
+	MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+	MainFrame.Size = UDim2.new(0.5, 0, 0.5, 0)
+	MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+	MainFrame.BackgroundColor3 = Color3.new(0.0313726, 0.141176, 0.4)
+	MainFrame.BackgroundTransparency = 0.5
+	MainFrame.BorderColor3 = Color3.new(0, 0, 0)
+	MainFrame.BorderSizePixel = 5
+	MainFrame.Parent = SettingsGui
+	MainFrame.Visible = false
+
+	local Topbar = Instance.new("Frame")
+	Topbar.Name = "Topbar"
+	Topbar.Position = UDim2.new(0.5, 0, 0.025, 0)
+	Topbar.Size = UDim2.new(0.95, 0, 0.115, 0)
+	Topbar.AnchorPoint = Vector2.new(0.5, 0)
+	Topbar.BackgroundColor3 = Color3.new(0.0588235, 0.262745, 0.745098)
+	Topbar.BorderColor3 = Color3.new(0.0431373, 0.2, 0.564706)
+	Topbar.BorderSizePixel = 5
+	Topbar.Parent = MainFrame
+
+	local CloseButton = Instance.new("TextButton")
+	CloseButton.Name = "CloseButton"
+	CloseButton.Position = UDim2.new(0.975, 0, 0.5, 0)
+	CloseButton.Size = UDim2.new(0.05, 0, 0.5, 0)
+	CloseButton.AnchorPoint = Vector2.new(1, 0.5)
+	CloseButton.BackgroundColor3 = Color3.new(1, 0, 0)
+	CloseButton.BorderColor3 = Color3.new(0.764706, 0, 0)
+	CloseButton.BorderSizePixel = 5
+	CloseButton.AutoButtonColor = false
+	CloseButton.Font = Enum.Font.LuckiestGuy
+	CloseButton.Text = ""
+	CloseButton.Parent = Topbar
+
+	local CloseText = Instance.new("TextLabel")
+	CloseText.Name = "CloseText"
+	CloseText.Position = UDim2.new(0.5, 0, 0.7, 0)
+	CloseText.Size = UDim2.new(1, 0, 1, 0)
+	CloseText.AnchorPoint = Vector2.new(0.5, 0.5)
+	CloseText.BackgroundTransparency = 1
+	CloseText.Font = Enum.Font.LuckiestGuy
+	CloseText.Text = "x"
+	CloseText.TextColor3 = Color3.new(0.12549, 0.188235, 0.333333)
+	CloseText.TextScaled = true
+	CloseText.TextYAlignment = Enum.TextYAlignment.Bottom
+	CloseText.Parent = CloseButton
+
+	local TitleHolder = Instance.new("Frame")
+	TitleHolder.Name = "TitleHolder"
+	TitleHolder.Position = UDim2.new(0.025, 0, 0, 0)
+	TitleHolder.Size = UDim2.new(0.5, 0, 1, 0)
+	TitleHolder.BackgroundTransparency = 1
+	TitleHolder.Parent = Topbar
+
+	local TitleText = Instance.new("TextLabel")
+	TitleText.Name = "TitleText"
+	TitleText.Position = UDim2.new(0.5, 0, 0.65, 0)
+	TitleText.Size = UDim2.new(1, 0, 1, 0)
+	TitleText.AnchorPoint = Vector2.new(0.5, 0.5)
+	TitleText.BackgroundTransparency = 1
+	TitleText.Font = Enum.Font.LuckiestGuy
+	TitleText.Text = "Settings"
+	TitleText.TextColor3 = Color3.new(0.831373, 0.898039, 1)
+	TitleText.TextScaled = true
+	TitleText.TextStrokeTransparency = 0
+	TitleText.Parent = TitleHolder
+
+	local ScrollHolder = Instance.new("Frame")
+	ScrollHolder.Name = "ScrollHolder"
+	ScrollHolder.Position = UDim2.new(0.5, 0, 0.575, 0)
+	ScrollHolder.Size = UDim2.new(0.95, 0, 0.8, 0)
+	ScrollHolder.AnchorPoint = Vector2.new(0.5, 0.5)
+	ScrollHolder.BackgroundColor3 = Color3.new(0.0392157, 0.164706, 0.458824)
+	ScrollHolder.BorderColor3 = Color3.new(0.0235294, 0.0980392, 0.27451)
+	ScrollHolder.BorderSizePixel = 5
+	ScrollHolder.ClipsDescendants = true
+	ScrollHolder.Parent = MainFrame
+
+	local ListScroller = Instance.new("ScrollingFrame")
+	ListScroller.Name = "ListScroller"
+	ListScroller.Position = UDim2.new(0.5, 0, 0.5, 0)
+	ListScroller.Size = UDim2.new(1, 0, 0.95, 0)
+	ListScroller.Active = true
+	ListScroller.AnchorPoint = Vector2.new(0.5, 0.5)
+	ListScroller.BackgroundTransparency = 1
+	ListScroller.BorderSizePixel = 0
+	ListScroller.ScrollBarThickness = 5
+	ListScroller.CanvasSize = UDim2.fromScale(0, 1.5)
+	ListScroller.Parent = ScrollHolder
+
+	local InnerShadow = Instance.new("UIShadow")
+	InnerShadow.BlurRadius = UDim.new(0.1, 0)
+	InnerShadow.Color = MainFrame.BackgroundColor3
+	InnerShadow.Transparency = 0.5
+	InnerShadow.Name = "InnerShadow"
+	InnerShadow.Parent = MainFrame
+
+	local OuterShadow = Instance.new("UIShadow")
+	OuterShadow.BlurRadius = UDim.new(0.5, 0)
+	OuterShadow.Color = Color3.new(0, 0, 0)
+	OuterShadow.Spread = UDim2.new(0.75, 0,0.75, 0)
+	OuterShadow.Transparency = 0.75
+	OuterShadow.Name = "OuterShadow"
+	OuterShadow.Parent = MainFrame
+
+	local Gradient = Instance.new("UIGradient")
+	Gradient.Name = "Gradient"
+	Gradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(90, 90, 90)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))
+	})
+	Gradient.Parent = MainFrame
+	Gradient.Rotation = 90
+
+	local ScrollGradient = Instance.new("UIGradient")
+	ScrollGradient.Name = "Gradient"
+	ScrollGradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(90, 90, 90)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))
+	})
+	ScrollGradient.Parent = ScrollHolder
+	ScrollGradient.Rotation = -90
+
+	local UIListLayout = Instance.new("UIListLayout")
+	UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	UIListLayout.Padding = UDim.new(0.025, 0)
+	UIListLayout.Parent = ListScroller
+	UIListLayout.VerticalFlex = Enum.UIFlexAlignment.Fill
+
+	local UIPadding = Instance.new("UIPadding")
+	UIPadding.PaddingTop = UDim.new(0.025, 0)
+	UIPadding.Parent = ListScroller
+
+	local AspectRatio = Instance.new("UIAspectRatioConstraint")
+	AspectRatio.AspectRatio = 1.46760559
+	AspectRatio.AspectType = Enum.AspectType.ScaleWithParentSize
+	AspectRatio.Parent = MainFrame
+
+	local function CreateSettingRow(name: string, defaultText: string): (Frame, TextButton, TextLabel)
+		local RowFrame = Instance.new("Frame")
+		RowFrame.Name = name .. "SettingRow"
+		RowFrame.Size = UDim2.new(0.9, 0, 0.175, 0)
+		RowFrame.BackgroundColor3 = Color3.new(0.0470588, 0.203922, 0.576471)
+		RowFrame.BackgroundTransparency = 0.5
+		RowFrame.BorderColor3 = Color3.new(0, 0, 0)
+		RowFrame.BorderSizePixel = 5
+		RowFrame.Parent = ListScroller
+
+		local Label = Instance.new("TextLabel")
+		Label.Name = "SettingLabel"
+		Label.Position = UDim2.new(0, 0, 0.5, 0)
+		Label.Size = UDim2.new(0.5, 0, 0.5, 0)
+		Label.AnchorPoint = Vector2.new(0, 0.5)
+		Label.BackgroundTransparency = 1
+		Label.Font = Enum.Font.ArialBold
+		Label.Text = name
+		Label.TextColor3 = Color3.new(1, 1, 1)
+		Label.TextScaled = true
+		Label.Parent = RowFrame
+
+		local Button = Instance.new("TextButton")
+		Button.Name = "ToggleButton"
+		Button.Position = UDim2.new(0.75, 0, 0.5, 0)
+		Button.Size = UDim2.new(0.35, 0, 0.5, 0)
+		Button.AnchorPoint = Vector2.new(0.5, 0.5)
+		Button.BackgroundColor3 = Color3.new(1, 0.886275, 0.0117647)
+		Button.BorderColor3 = Color3.new(0.886275, 0.784314, 0.0117647)
+		Button.BorderSizePixel = 5
+		Button.AutoButtonColor = false
+		Button.Font = Enum.Font.LuckiestGuy
+		Button.Text = ""
+		Button.Parent = RowFrame
+
+		local ButtonText = Instance.new("TextLabel")
+		ButtonText.Name = "StatusText"
+		ButtonText.Position = UDim2.new(0.5, 0, 0.65, 0)
+		ButtonText.Size = UDim2.new(0.8, 0, 0.8, 0)
+		ButtonText.AnchorPoint = Vector2.new(0.5, 0.5)
+		ButtonText.BackgroundTransparency = 1
+		ButtonText.Font = Enum.Font.LuckiestGuy
+		ButtonText.Text = defaultText
+		ButtonText.TextColor3 = Color3.new(0.12549, 0.188235, 0.333333)
+		ButtonText.TextScaled = true
+		ButtonText.Parent = Button
+
+		if defaultText == "Disabled" then
+			ButtonText.Text = "Disabled"
+			Button.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+			Button.BorderColor3 = Color3.fromRGB(100, 100, 100)
+		end
+
+		return RowFrame, Button, ButtonText
+	end
+
+	local SpeedRow, SpeedBtn, SpeedText = CreateSettingRow("Speed Boost", "Enabled")
+	local FovRow, FovBtn, FovText = CreateSettingRow("Fov Boost", "Disabled")
+	local SoundsRow, SoundsBtn, SoundsText = CreateSettingRow("Modded weapons (Requires reset to toggle)", "Enabled")
+	local MeowRow, MeowBtn, MeowText = CreateSettingRow("Mprr~ Meow :3", "OwO")
+	local DoorRow, DoorBtn, DoorText = CreateSettingRow("No doors", "Disabled")
+	local EspRow, EspBtn, EspText = CreateSettingRow("Esp", "Disabled")
+	local NoAntiJumpRow, NoAntiJumpBtn, NoAntiJumpText = CreateSettingRow("Infinite jump", "Enabled")
+	local AntiFlingRow, AntiFlingBtn, AntiFlingText = CreateSettingRow("AntiFling: this removes the collison of cars to avoid exploits related to kicking.", "Disabled")
+
+	local CloseBtnConnection = CloseButton.MouseButton1Click:Connect(function()
+		MainFrame.Visible = false
+	end)
+	table.insert(TrackingRefs, CloseBtnConnection)
+
+	local SpeedBtnConnection = SpeedBtn.Activated:Connect(function()
+		if GlobalSettings.Speedboost then
+			GlobalSettings.Speedboost = false
+			SpeedText.Text = "Disabled"
+			SpeedBtn.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+			SpeedBtn.BorderColor3 = Color3.fromRGB(100, 100, 100)
+		else
+			SpeedText.Text = "Enabled"
+			SpeedBtn.BackgroundColor3 = Color3.fromRGB(255, 226, 3)
+			SpeedBtn.BorderColor3 = Color3.fromRGB(226, 200, 3)
+			GlobalSettings.Speedboost = true
+		end
+	end)
+
+	local FovBtnConnection = FovBtn.Activated:Connect(function()
+		if GlobalSettings.FovBoost then
+			GlobalSettings.FovBoost = false
+			FovText.Text = "Disabled"
+			FovBtn.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+			FovBtn.BorderColor3 = Color3.fromRGB(100, 100, 100)
+		else
+			FovText.Text = "Enabled"
+			FovBtn.BackgroundColor3 = Color3.fromRGB(255, 226, 3)
+			FovBtn.BorderColor3 = Color3.fromRGB(226, 200, 3)
+			GlobalSettings.FovBoost = true
+		end
+	end)
+
+	local SoundsBtnConnection = SoundsBtn.Activated:Connect(function()
+		if GlobalSettings.ModdedWeapons then
+			GlobalSettings.ModdedWeapons = false
+			SoundsText.Text = "Disabled"
+			SoundsBtn.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+			SoundsBtn.BorderColor3 = Color3.fromRGB(100, 100, 100)
+		else
+			SoundsText.Text = "Enabled"
+			SoundsBtn.BackgroundColor3 = Color3.fromRGB(255, 226, 3)
+			SoundsBtn.BorderColor3 = Color3.fromRGB(226, 200, 3)
+			GlobalSettings.ModdedWeapons = true
+		end
+	end)
+
+	local DoorBtnConnection = DoorBtn.Activated:Connect(function()
+		if GlobalSettings.DoorsDisabled then
+			GlobalSettings.DoorsDisabled = false
+			DoorText.Text = "Disabled"
+			DoorBtn.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+			DoorBtn.BorderColor3 = Color3.fromRGB(100, 100, 100)
+		else
+			DoorText.Text = "Enabled"
+			DoorBtn.BackgroundColor3 = Color3.fromRGB(255, 226, 3)
+			DoorBtn.BorderColor3 = Color3.fromRGB(226, 200, 3)
+			GlobalSettings.DoorsDisabled = true
+		end
+	end)
+
+	local NoAntiJumpBtnConnection = NoAntiJumpBtn.Activated:Connect(function()
+		if GlobalSettings.DisableAntiJump then
+			GlobalSettings.DisableAntiJump = false
+			NoAntiJumpText.Text = "Disabled"
+			NoAntiJumpBtn.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+			NoAntiJumpBtn.BorderColor3 = Color3.fromRGB(100, 100, 100)
+		else
+			NoAntiJumpText.Text = "Enabled"
+			NoAntiJumpBtn.BackgroundColor3 = Color3.fromRGB(255, 226, 3)
+			NoAntiJumpBtn.BorderColor3 = Color3.fromRGB(226, 200, 3)
+			GlobalSettings.DisableAntiJump = true
+		end
+	end)
+	
+	local AntiFlingConnection = AntiFlingBtn.Activated:Connect(function()
+		if GlobalSettings.AntiFling then
+			GlobalSettings.AntiFling = false
+			AntiFlingText.Text = "Disabled"
+			AntiFlingBtn.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+			AntiFlingBtn.BorderColor3 = Color3.fromRGB(100, 100, 100)
+		else
+			AntiFlingText.Text = "Enabled"
+			AntiFlingBtn.BackgroundColor3 = Color3.fromRGB(255, 226, 3)
+			AntiFlingBtn.BorderColor3 = Color3.fromRGB(226, 200, 3)
+			GlobalSettings.AntiFling = true
+		end
+	end)
+
+	local TrollTexts = {">~<", "Stop it! >,<", "Meowww!", "Prrr~", ":3", "Hiss!", "OwO", "Meow :3", ":3c", "Mprp~ Meow :3"}
+	local CurrentTrollIndex = 1
+	local MeowBtnConnection = MeowBtn.Activated:Connect(function()
+		CurrentTrollIndex = (CurrentTrollIndex % #TrollTexts) + 1
+		MeowText.Text = TrollTexts[CurrentTrollIndex]
+
+		MeowBtn.BackgroundColor3 = Color3.fromHSV(math.random(), 0.8, 1)
+		MeowBtn.BorderColor3 = Color3.fromHSV(math.random(), 1, 0.8)
+	end)
+
+	local EspBtnConnection = EspBtn.Activated:Connect(function()
+		if GlobalSettings.ESP then
+			GlobalSettings.ESP = false
+			EspText.Text = "Disabled"
+			EspBtn.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+			EspBtn.BorderColor3 = Color3.fromRGB(100, 100, 100)
+		else
+			EspText.Text = "Enabled"
+			EspBtn.BackgroundColor3 = Color3.fromRGB(255, 226, 3)
+			EspBtn.BorderColor3 = Color3.fromRGB(226, 200, 3)
+			GlobalSettings.ESP = true
+		end
+	end)
+
+	table.insert(TrackingRefs, CloseBtnConnection)
+	table.insert(TrackingRefs, SpeedBtnConnection)
+	table.insert(TrackingRefs, FovBtnConnection)
+	table.insert(TrackingRefs, SoundsBtnConnection)
+	table.insert(TrackingRefs, MeowBtnConnection)
+	table.insert(TrackingRefs, DoorBtnConnection)
+	table.insert(TrackingRefs, EspBtnConnection)
+
+	local function ToggleSettings()
+		if not MainFrame.Visible then
+			MainFrame.Visible = true
+		end
+	end
+
+	local function ForceClose()
+		MainFrame.Visible = true		
+	end
+
+	ContextActionService:BindAction(
+		"OpenSettings", 
+		ToggleSettings, 
+		true, 
+		Enum.UserInputType.MouseButton3
+	)
+
+	GuiService.MenuOpened:Connect(function()
+		MainFrame.Visible = false
+	end)
+
+	local CharacterAddedConnection = Player.CharacterAdded:Connect(function(NewCharacter: Model)
+		if NewCharacter then
+			Character = NewCharacter
+			Humanoid = Character:FindFirstChildWhichIsA("Humanoid")
+		end
+	end)
+	table.insert(TrackingRefs, CharacterAddedConnection)
+
+	local boundTools: { [Instance]: boolean } = {}
+
+	local function startDistanceSwapper(handle: BasePart, settings: any)
+		local shootSound = handle:WaitForChild("ShootSound", 10)
+		if not shootSound or not shootSound:IsA("Sound") then return end
+		local shootSoundObject: Sound = shootSound :: Sound
+
+		shootSoundObject.RollOffMinDistance = settings.MinDistance or 10
+		shootSoundObject.RollOffMaxDistance = settings.MaxDistance or 2500
+
+		local connection: RBXScriptConnection
+		connection = RunService.Heartbeat:Connect(function()
+			if not handle or not handle.Parent or not handle:IsDescendantOf(workspace) then 
+				connection:Disconnect()
+				return 
+			end
+
+			if not GlobalSettings.ModdedWeapons then return end
+
+			local cam = workspace.CurrentCamera
+			if not cam then return end
+
+			local dist = (handle.Position - cam.CFrame.Position).Magnitude
+			local targetId = ""
+
+			if dist < (settings.MidStart or 150) then
+				targetId = settings.ShootSoundId.Near
+			elseif dist < (settings.FarStart or 600) then
+				targetId = settings.ShootSoundId.Mid
+			else
+				targetId = settings.ShootSoundId.Far
+			end
+
+			if shootSoundObject.SoundId ~= targetId then
+				shootSoundObject.SoundId = targetId
+			end
+		end)
+	end
+
+	local function applyWeaponModifications(tool: Instance)
+		if not tool:IsA("Tool") then return end
+		local weaponTool: Tool = tool :: Tool
+
+		local settings: any = (weaponSettings :: any)[weaponTool.Name]
+		if not settings then return end
+
+		for attrName: string, attrValue: any in pairs(settings) do
+			if type(attrValue) ~= "table" then
+				weaponTool:SetAttribute(attrName, attrValue)
+			end
+		end
+
+		local handle: Instance? = weaponTool:FindFirstChild("Handle")
+		if handle and handle:IsA("BasePart") then
+			local baseHandle: BasePart = handle :: BasePart
+			local shootData: any = settings["ShootSoundId"]
+
+			if GlobalSettings.ModdedWeapons then
+				if type(shootData) == "table" then
+					startDistanceSwapper(baseHandle, settings)
+				elseif type(shootData) == "string" then
+					local soundObj: Instance? = baseHandle:FindFirstChild("ShootSound")
+					if soundObj and soundObj:IsA("Sound") then 
+						(soundObj :: Sound).SoundId = shootData 
+					end
+				end
+
+				if settings.ReloadSoundId then
+					local reloadObj: Instance? = baseHandle:FindFirstChild("ReloadSound")
+					if reloadObj and reloadObj:IsA("Sound") then 
+						(reloadObj :: Sound).SoundId = settings.ReloadSoundId 
+					end
+				end
+
+				if settings.SecondarySoundId then
+					local SecondObj: Instance? = baseHandle:FindFirstChild("SecondarySound")
+					if SecondObj and SecondObj:IsA("Sound") then 
+						(SecondObj :: Sound).SoundId = settings.SecondarySoundId 
+					end
+				end
+			end
+		end
+
+		if settings.EquipSoundId and settings.EquipSoundId ~= "" and not boundTools[weaponTool] then
+			boundTools[weaponTool] = true
+
+			local targetParent: Instance = handle or weaponTool
+			local equipSound: Instance? = targetParent:FindFirstChild("EquipSound")
+
+			if not equipSound then
+				local newSound = Instance.new("Sound")
+				newSound.Name = "EquipSound"
+				newSound.SoundId = settings.EquipSoundId
+				newSound.Volume = 0.6
+				newSound.Parent = targetParent
+				equipSound = newSound
+			end
+
+			local soundObj: Sound = equipSound :: Sound
+
+			local equipConn = weaponTool.Equipped:Connect(function()
+				local character: Instance? = weaponTool.Parent
+				if character and character:IsA("Model") and Players:GetPlayerFromCharacter(character :: Model) == Player then
+					if GlobalSettings.ModdedWeapons then
+						soundObj:Play()
+					end
+				end
+			end)
+			table.insert(TrackingRefs, equipConn)
+
+			local destroyConn = weaponTool.Destroying:Connect(function()
+				boundTools[weaponTool] = nil
+			end)
+			table.insert(TrackingRefs, destroyConn)
+		end
+	end
+
+	local function setupCharacter(char: Model)
+		local childAddedConn = char.ChildAdded:Connect(applyWeaponModifications)
+		table.insert(TrackingRefs, childAddedConn)
+
+		for _, item: Instance in pairs(char:GetChildren()) do
+			if item:IsA("Tool") then
+				applyWeaponModifications(item) 
+			end
+		end
+	end
+
+	local function observePlayer(plr: Player)
+		local charAddedConn = plr.CharacterAdded:Connect(setupCharacter)
+		table.insert(TrackingRefs, charAddedConn)
+		if plr.Character then setupCharacter(plr.Character) end
+
+		if plr == Player then
+			local backpack: Backpack? = plr:FindFirstChildOfClass("Backpack")
+			if backpack then
+				local bpAddedConn = backpack.ChildAdded:Connect(applyWeaponModifications)
+				table.insert(TrackingRefs, bpAddedConn)
+
+				for _, item: Instance in pairs(backpack:GetChildren()) do
+					if item:IsA("Tool") then
+						applyWeaponModifications(item)
+					end
+				end
+			end
+		end
+	end
+
+	local playerAddedConn = Players.PlayerAdded:Connect(observePlayer)
+	table.insert(TrackingRefs, playerAddedConn)
+	for _, plr in pairs(Players:GetPlayers()) do
+		observePlayer(plr)
+	end
+
+	local function getDoorsModel()
+		if Doors and Doors.Parent then return Doors end 
+
+		return workspace:FindFirstChild("Doors") or ReplicatedStorage:FindFirstChild("Doors")
+	end
+
+	local function updatePlayerHighlight(player)
+		if player == LocalPlayer then return end
+
+		local character = player.Character
+		if character and character:FindFirstChild("HumanoidRootPart") then
+			local highlight = character:FindFirstChild("Highlight") :: Highlight
+
+			if GlobalSettings.ESP then
+				if not highlight then
+					highlight = Instance.new("Highlight")
+					highlight.Name = "Highlight"
+					highlight.FillTransparency = 1
+					highlight.OutlineTransparency = 0
+					highlight.Parent = character
+				end
+
+				if player.Team then
+					highlight.OutlineColor = player.TeamColor.Color
+				else
+					highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+				end
+			elseif highlight then
+				highlight:Destroy()
+			end
+		end
+	end
+
+	local playerAddedConn = Players.PlayerAdded:Connect(function(player)
+		player.CharacterAdded:Connect(function()
+			task.wait(0.1)
+			updatePlayerHighlight(player)
+		end)
+	end)
+
+	while true do
+
+		if LocalPlayer.Character then
+			if not Humanoid or Humanoid.Parent ~= LocalPlayer.Character then
+				Humanoid = LocalPlayer.Character:FindFirstChildWhichIsA("Humanoid") :: Humanoid
+			end
+			if Humanoid then
+				Humanoid.WalkSpeed = GlobalSettings.Speedboost and 25 or 16
+			end
+		end
+
+		if Camera then
+			if GlobalSettings.FovBoost and Camera.FieldOfView == 70 then
+				Camera.FieldOfView = 87
+			elseif not GlobalSettings.FovBoost and Camera.FieldOfView == 87 then
+				Camera.FieldOfView = 70
+			end
+		end
+
+		if GlobalSettings.ESP then
+			for _, targetPlayer in ipairs(Players:GetPlayers()) do
+				updatePlayerHighlight(targetPlayer)
+			end
+		else
+			for _, targetPlayer in ipairs(Players:GetPlayers()) do
+				if targetPlayer.Character then
+					local highlight = targetPlayer.Character:FindFirstChild("Highlight")
+					if highlight then highlight:Destroy() end
+				end
+			end
+		end
+
+		if GlobalSettings.DisableAntiJump then
+			if LocalPlayer.Character:FindFirstChild("AntiJump") then
+				LocalPlayer.Character.AntiJump.Disabled = true
+			end
+		else
+			if LocalPlayer.Character:FindFirstChild("AntiJump") then
+				LocalPlayer.Character.AntiJump.Disabled = false
+			end
+		end
+
+		local doorModel = getDoorsModel()
+		if doorModel then
+			Doors = doorModel
+			local targetParent = GlobalSettings.DoorsDisabled and ReplicatedStorage or workspace
+			if Doors.Parent ~= targetParent then
+				Doors.Parent = targetParent
+			end
+		end
+
+		if ClientFramework and ClientFramework.Heartbeats then
+			ClientFramework.Heartbeats.SettingsMenu = os.clock()
+		end
+
+		task.wait(1)
+	end
+end
+
+ClientFramework.Modules.Inventory = function()
+	ClientFramework.ActiveUI.Inventory = ClientFramework.ActiveUI.Inventory or {}
+	local TrackingRefs = ClientFramework.ActiveUI.Inventory
+
+	local TargetParent: Instance
+	if gethui then
+		TargetParent = gethui()
+	elseif RunService:IsStudio() then
+		TargetParent = Player:WaitForChild("PlayerGui")
+	else
+		TargetParent = game:GetService("CoreGui")
+	end
+
+	local Backpack = Player:WaitForChild("Backpack") :: Backpack
+	local Character = Player.Character or Player.CharacterAdded:Wait()
+	local charConnections: { RBXScriptConnection } = {}
+
+	local Gui: ScreenGui
+	local HotbarFrame: Frame
+	local InventoryFrame: Frame
+	local InventorySlotsFrame: Frame
+	local AmoLabel: TextLabel
+	local Hud: Frame? = nil
+
+	local DraggingTool: any
+	local DragFrame: Frame? = nil
+
+	local CurrentHotbar: { [number]: Tool? } = {
+		[1] = nil, [2] = nil, [3] = nil, [4] = nil, [5] = nil,
+	}
+	local InventoryTools: { Tool } = {}
+
+	local SLOT_DATA: { [string]: { DefaultSlot: number?, Offset: Vector2?, Color: Color3, Transparency: number? } } = {
+		["Remington 870"] = { DefaultSlot = 1, Offset = Vector2.new(256, 0), Color = Color3.fromRGB(190, 162, 5) },
+		["MP5"]           = { DefaultSlot = 2, Offset = Vector2.new(0, 384), Color = Color3.fromRGB(52, 159, 41) },
+		["AK-47"]         = { DefaultSlot = 2, Offset = Vector2.new(0, 128), Color = Color3.fromRGB(31, 119, 190) },
+		["FAL"]           = { DefaultSlot = 2, Color = Color3.fromRGB(115, 19, 134) },
+		["M4A1"]          = { DefaultSlot = 2, Offset = Vector2.new(0, 256), Color = Color3.fromRGB(190, 162, 5) },
+		["M700"]          = { DefaultSlot = 2, Offset = Vector2.new(256, 128), Color = Color3.fromRGB(190, 162, 5) },
+		["M9"]            = { DefaultSlot = 3, Color = Color3.fromRGB(52, 159, 41) },
+		["Revolver"]      = { DefaultSlot = 3, Color = Color3.fromRGB(115, 19, 134) },
+		["C4"]            = { DefaultSlot = 3, Color = Color3.fromRGB(115, 19, 134) },
+		["Taser"]         = { DefaultSlot = 4, Color = Color3.fromRGB(31, 119, 190) },
+		["Handcuffs"]     = { DefaultSlot = 5, Color = Color3.fromRGB(31, 119, 190) },
+		["Key-Card"]      = { DefaultSlot = 5, Color = Color3.fromRGB(115, 19, 134) },
+		["Breakfast"]     = { DefaultSlot = 5, Color = Color3.fromRGB(115, 19, 134) },
+		["Lunch"]         = { DefaultSlot = 5, Color = Color3.fromRGB(115, 19, 134) },
+		["Dinner"]        = { DefaultSlot = 5, Color = Color3.fromRGB(115, 19, 134) },
+	}
+
+	local function CleanConnections()
+		for _, conn in ipairs(charConnections) do
+			if conn then conn:Disconnect() end
+		end
+		table.clear(charConnections)
+	end
+
+	local function ToolExists(tool: Tool): boolean
+		for _, v in pairs(CurrentHotbar) do
+			if v == tool then return true end
+		end
+		return table.find(InventoryTools, tool) ~= nil
+	end
+
+	local function RegisterTool(tool: Tool)
+		if not tool:IsA("Tool") or ToolExists(tool) then return end
+
+		local data = SLOT_DATA[tool.Name]
+		if data and data.DefaultSlot then
+			local preferred = data.DefaultSlot
+			if not CurrentHotbar[preferred] then
+				CurrentHotbar[preferred] = tool
+				return
+			end
+		end
+
+		for i = 1, 5 do
+			if not CurrentHotbar[i] then
+				CurrentHotbar[i] = tool
+				return
+			end
+		end
+		table.insert(InventoryTools, tool)
+	end
+
+	local function RemoveTool(tool: Tool)
+		for i, v in pairs(CurrentHotbar) do
+			if v == tool then CurrentHotbar[i] = nil end
+		end
+		local index = table.find(InventoryTools, tool)
+		if index then table.remove(InventoryTools, index) end
+	end
+
+	local function EndDrag()
+		if DragFrame then DragFrame:Destroy() end
+		DragFrame = nil
+		DraggingTool = nil
+	end
+
+	local function CreateSlot(index: number, inventory: boolean): Frame
+		local Slot = Instance.new("Frame")
+		Slot.Name = "Slot" .. index
+
+		if inventory then
+			Slot.Size = UDim2.new(0.175,0,0.95,0)
+		else
+			Slot.Size = UDim2.new(0.325,0,1,0)
+		end
+
+		Slot.BackgroundColor3 = Color3.fromRGB(157,150,148)
+		Slot.BackgroundTransparency = 0.5
+		Slot.BorderColor3 = Color3.new(1,1,1)
+		Slot.BorderSizePixel = 0
+
+		local Scale = Instance.new("UIScale")
+		Scale.Name = "SelectionScale"
+		Scale.Parent = Slot
+
+		local Icon = Instance.new("ImageLabel")
+		Icon.Name = "Icon"
+		Icon.BackgroundTransparency = 1
+		Icon.Size = UDim2.new(1,0,1,0)
+		Icon.Image = "rbxassetid://93481383611512"
+		Icon.ScaleType = Enum.ScaleType.Fit
+		Icon.ImageRectSize = Vector2.new(256,128)
+		Icon.BorderSizePixel = 0
+		Icon.Visible = false
+		Icon.Parent = Slot
+
+		local UiShadow = Instance.new("UIShadow")
+		UiShadow.BlurRadius = UDim.new(0.05, 0)
+		UiShadow.Color = Slot.BackgroundColor3
+		UiShadow.Spread = UDim2.new(0.05, 0,0.05, 0)
+		UiShadow.Transparency = 0.65
+		UiShadow.Parent = Slot
+		UiShadow.Enabled = GlobalSettings.UIShadowsEnabled
+
+		local Gradient = Instance.new("UIGradient")
+		Gradient.Name = "Gradient"
+		Gradient.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(200, 200, 200)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))
+		})
+		Gradient.Parent = Icon
+		Gradient.Rotation = 90
+
+		local Gradient2 = Instance.new("UIGradient")
+		Gradient2.Name = "Gradient"
+		Gradient2.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(200, 200, 200)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))
+		})
+		Gradient2.Parent = Slot
+		Gradient2.Rotation = 90
+
+		local Vignette = Instance.new("ImageLabel")
+		Vignette.Name = "Vignette"
+		Vignette.BackgroundTransparency = 1
+		Vignette.Size = UDim2.new(1,0,1,0)
+		Vignette.Image = "rbxassetid://3156051337"
+		Vignette.ImageTransparency = 0.65
+		Vignette.Parent = Slot
+		Vignette.Visible = true
+
+		local Label = Instance.new("TextLabel")
+		Label.Name = "SlotLabel"
+		Label.BackgroundTransparency = 1
+		Label.Size = UDim2.new(1,0,1,0)
+		Label.TextScaled = true
+		Label.TextColor3 = Color3.new(1,1,1)
+		Label.Text = ""
+		Label.Parent = Slot
+
+		local Button = Instance.new("ImageButton")
+		Button.Name = "Button"
+		Button.BackgroundTransparency = 1
+		Button.ImageTransparency = 1
+		Button.AutoButtonColor = false
+		Button.Size = UDim2.new(1,0,1,0)
+		Button.Parent = Slot
+
+		local AmoFrame = Instance.new("Frame")
+		AmoFrame.Name = "AmoFrame"
+		AmoFrame.AnchorPoint = Vector2.new(0, 1)
+		AmoFrame.Position = UDim2.fromScale(0, 1)
+		AmoFrame.Size = UDim2.fromScale(1, 0.25)
+		AmoFrame.BackgroundTransparency = 1
+		AmoFrame.ZIndex = 2
+		AmoFrame.Parent = Slot
+
+		local SlotAmoLabel = Instance.new("TextLabel")
+		SlotAmoLabel.Name = "AmoLabel"
+		SlotAmoLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+		SlotAmoLabel.Position = UDim2.fromScale(0.5, 0.5)
+		SlotAmoLabel.Size = UDim2.fromScale(0.8, 1)
+		SlotAmoLabel.TextScaled = true
+		SlotAmoLabel.Font = Enum.Font.Arimo
+		SlotAmoLabel.Text = ""
+		SlotAmoLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+		SlotAmoLabel.TextStrokeTransparency = 1
+		SlotAmoLabel.BackgroundTransparency = 1
+		SlotAmoLabel.TextXAlignment = Enum.TextXAlignment.Right
+		SlotAmoLabel.ZIndex = 2
+		SlotAmoLabel.Parent = AmoFrame
+
+		return Slot
+	end
+
+	local function UpdateSlot(slot: Frame, tool: Tool?, equipped: boolean)
+		local icon = slot:FindFirstChild("Icon") :: ImageLabel
+		local label = slot:FindFirstChild("SlotLabel") :: TextLabel
+		local scale = slot:FindFirstChild("SelectionScale") :: UIScale
+		local shadow = slot:FindFirstChild("UIShadow") :: UIShadow
+
+		icon.Visible = false
+		label.Text = ""
+		scale.Scale = 1
+		slot.BackgroundTransparency = 0.5
+		slot.BackgroundColor3 = Color3.fromRGB(157, 150, 148)
+		shadow.Color = Color3.fromRGB(157, 150, 148)
+
+		if not tool then return end
+
+		local data = SLOT_DATA[tool.Name]
+		if data then
+			if data.Offset then
+				icon.Visible = true
+				icon.ImageRectOffset = data.Offset
+			else
+				label.Text = tool.Name
+			end
+			slot.BackgroundTransparency = data.Transparency or 0
+			slot.BackgroundColor3 = data.Color or Color3.fromRGB(157, 150, 148)
+			shadow.Color = data.Color or Color3.fromRGB(157, 150, 148)
+		else
+			label.Text = tool.Name
+		end
+
+		if equipped then
+			scale.Scale = 1.1
+			slot.BackgroundTransparency = 0
+		end
+	end
+
+	local function ResolveLiveTool(tool: Tool?): Tool?
+		if not tool then return nil end
+
+		local liveInCharacter = Character and Character:FindFirstChild(tool.Name)
+		if liveInCharacter and liveInCharacter:IsA("Tool") then
+			return liveInCharacter :: Tool
+		end
+
+		local liveInBackpack = Backpack and Backpack:FindFirstChild(tool.Name)
+		if liveInBackpack and liveInBackpack:IsA("Tool") then
+			return liveInBackpack :: Tool
+		end
+
+		return tool
+	end
+
+	local function UpdateSlotAmmo(slot: Frame, tool: Tool?)
+		local amoFrame = slot:FindFirstChild("AmoFrame") :: Frame?
+		if not amoFrame then return end
+		local amoLabel = amoFrame:FindFirstChild("AmoLabel") :: TextLabel?
+		if not amoLabel then return end
+
+		if not tool then
+			amoLabel.Text = ""
+			return
+		end
+
+		local current = tool:GetAttribute("CurrentAmmo")
+			or tool:GetAttribute("CurrentAmo")
+			or tool:GetAttribute("Local_CurrentAmmo")
+			or tool:GetAttribute("Local_CurrentAmo")
+		local max = tool:GetAttribute("MaxAmmo") or tool:GetAttribute("MaxAmo")
+
+		amoLabel.Text = (current and max) and (tostring(current) .. " / " .. tostring(max)) or ""
+	end
+
+	local function UpdateHotbar()
+		local equippedTool = Character and Character:FindFirstChildOfClass("Tool")
+
+		for i = 1, 5 do
+			local slot = HotbarFrame:FindFirstChild("Slot" .. i) :: Frame?
+			if slot then
+				local tool = CurrentHotbar[i]
+				UpdateSlot(slot, tool, tool == equippedTool)
+
+				local button = slot:FindFirstChild("Button") :: ImageButton
+				if not button:GetAttribute("Bound") then
+					button:SetAttribute("Bound", true)
+					button.MouseButton1Down:Connect(function()
+						if CurrentHotbar[i] then
+							DraggingTool = CurrentHotbar[i]
+							DragFrame = slot:Clone()
+							DragFrame.Parent = Gui
+							DragFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+							DragFrame.Size = UDim2.fromOffset(slot.AbsoluteSize.X, slot.AbsoluteSize.Y)
+							DragFrame.ZIndex = 999
+
+							for _,obj in ipairs(DragFrame:GetDescendants()) do
+								if obj:IsA("GuiObject") then
+									obj.ZIndex = 999
+								end
+							end
+						end
+					end)
+				end
+			end
+		end
+
+		for i = 1, 5 do
+			local slot = InventorySlotsFrame:FindFirstChild("Slot" .. i) :: Frame?
+			if slot then
+				UpdateSlot(slot, InventoryTools[i], false)
+
+				local button = slot:FindFirstChild("Button") :: ImageButton
+				if not button:GetAttribute("Bound") then
+					button:SetAttribute("Bound", true)
+					button.MouseButton1Down:Connect(function()
+						if InventoryTools[i] then
+							DraggingTool = InventoryTools[i]
+							DragFrame = slot:Clone()
+							DragFrame.Parent = Gui
+							DragFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+							DragFrame.Size = UDim2.fromOffset(slot.AbsoluteSize.X, slot.AbsoluteSize.Y)
+							DragFrame.ZIndex = 999
+
+							for _,obj in ipairs(DragFrame:GetDescendants()) do
+								if obj:IsA("GuiObject") then
+									obj.ZIndex = 999
+								end
+							end
+
+						end
+					end)
+				end
+			end
+		end
+	end
+
+	local function EquipSlot(slotName: string, inputState: Enum.UserInputState)
+		if inputState ~= Enum.UserInputState.Begin or not Character then return end
+
+		local slotNumber = tonumber(slotName:sub(-1))
+		if not slotNumber then return end
+
+		local tool = CurrentHotbar[slotNumber]
+		local humanoid = Character:FindFirstChildOfClass("Humanoid")
+		local currentTool = Character:FindFirstChildOfClass("Tool")
+
+		if tool and tool.Parent == Backpack then
+			if humanoid then humanoid:EquipTool(tool) end
+		elseif currentTool == tool and tool ~= nil then
+			if humanoid then humanoid:UnequipTools() end
+		end
+
+		return Enum.ContextActionResult.Sink
+	end
+
+	Gui = Instance.new("ScreenGui")
+	Gui.Name = "HotbarGui"
+	Gui.ResetOnSpawn = false
+	Gui.Parent = TargetParent
+	table.insert(TrackingRefs, Gui)
+
+	HotbarFrame = Instance.new("Frame")
+	HotbarFrame.Name = "HotbarFrame"
+	HotbarFrame.BackgroundTransparency = 1
+	HotbarFrame.AnchorPoint = Vector2.new(1, 0.5)
+	HotbarFrame.Size = UDim2.new(0.4, 0, 0.1, 0)
+	HotbarFrame.Position = UDim2.new(0.95, 0, 0.85, 0)
+	HotbarFrame.Parent = Gui
+
+	local Layout = Instance.new("UIListLayout")
+	Layout.FillDirection = Enum.FillDirection.Horizontal
+	Layout.VerticalAlignment = Enum.VerticalAlignment.Center
+	Layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+	Layout.Padding = UDim.new(0.025, 0)
+	Layout.Parent = HotbarFrame
+
+	local Aspect = Instance.new("UIAspectRatioConstraint")
+	Aspect.AspectRatio = 3.238
+	Aspect.Parent = HotbarFrame
+
+	for i = 1, 5 do
+		local slot = CreateSlot(i, false)
+		slot.LayoutOrder = i
+		slot.Parent = HotbarFrame
+	end
+
+	InventoryFrame = Instance.new("Frame")
+	InventoryFrame.Name = "InventoryFrame"
+	InventoryFrame.BackgroundTransparency = 0.5
+	InventoryFrame.BackgroundColor3 = Color3.fromRGB(8, 36, 102)
+	InventoryFrame.BorderSizePixel = 0
+	InventoryFrame.AnchorPoint = Vector2.new(1, 0.5)
+	InventoryFrame.Size = UDim2.new(0.285, 285, 0.402, 0)
+	InventoryFrame.Position = UDim2.new(0.964, 0, 0.725, 0)
+	InventoryFrame.Visible = false
+	InventoryFrame.ZIndex = 0
+	InventoryFrame.Parent = Gui
+
+	local InnerShadow = Instance.new("UIShadow")
+	InnerShadow.BlurRadius = UDim.new(0.1, 0)
+	InnerShadow.Color = InventoryFrame.BackgroundColor3
+	InnerShadow.Transparency = 0.5
+	InnerShadow.Name = "InnerShadow"
+	InnerShadow.Parent = InventoryFrame
+
+	local OuterShadow = Instance.new("UIShadow")
+	OuterShadow.BlurRadius = UDim.new(0.5, 0)
+	OuterShadow.Color = Color3.new(0, 0, 0)
+	OuterShadow.Spread = UDim2.new(0.75, 0,0.75, 0)
+	OuterShadow.Transparency = 0.75
+	OuterShadow.Name = "OuterShadow"
+	OuterShadow.Parent = InventoryFrame
+
+	local Gradient = Instance.new("UIGradient")
+	Gradient.Name = "Gradient"
+	Gradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(90, 90, 90)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))
+	})
+	Gradient.Parent = InventoryFrame
+	Gradient.Rotation = 90
+
+	InventorySlotsFrame = Instance.new("Frame")
+	InventorySlotsFrame.Name = "InventorySlotsFrame"
+	InventorySlotsFrame.BackgroundTransparency = 1
+	InventorySlotsFrame.BorderSizePixel = 0
+	InventorySlotsFrame.AnchorPoint = Vector2.new(1, 0.5)
+	InventorySlotsFrame.Size = UDim2.new(0.925, 0, 0.25, 0)
+	InventorySlotsFrame.Position = UDim2.new(0.963, 0, 0.185, 0)
+	InventorySlotsFrame.Parent = InventoryFrame
+
+	local InvLayout = Instance.new("UIListLayout")
+	InvLayout.FillDirection = Enum.FillDirection.Horizontal
+	InvLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	InvLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	InvLayout.Padding = UDim.new(0.025, 0)
+	InvLayout.Parent = InventorySlotsFrame
+
+	local InventoryAspect = Instance.new("UIAspectRatioConstraint")
+	InventoryAspect.AspectRatio = 1.508
+	InventoryAspect.Parent = InventoryFrame
+
+	for i = 1, 5 do
+		local slot = CreateSlot(i, true)
+		slot.LayoutOrder = i
+		slot.Parent = InventorySlotsFrame
+	end
+
+	for i = 1, 5 do
+		ContextActionService:BindAction("Slot" .. i, EquipSlot, false, Enum.KeyCode[({ "One", "Two", "Three", "Four", "Five" })[i]])
+	end
+
+	local TabConnection = UserInputService.InputBegan:Connect(function(input, processed)
+		if processed then return end
+		if input.KeyCode == Enum.KeyCode.Tab then
+			InventoryFrame.Visible = not InventoryFrame.Visible
+		end
+	end)
+	table.insert(TrackingRefs, TabConnection)
+
+	local DragEndConnection = UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1 or not DraggingTool then return end
+		local mousePos = UserInputService:GetMouseLocation()
+
+		for i = 1, 5 do
+			local slot = HotbarFrame:FindFirstChild("Slot" .. i) :: Frame?
+			if slot then
+				local pos = slot.AbsolutePosition
+				local size = slot.AbsoluteSize
+				if mousePos.X >= pos.X and mousePos.X <= pos.X + size.X and mousePos.Y >= pos.Y and mousePos.Y <= pos.Y + size.Y then
+					for k, v in pairs(CurrentHotbar) do if v == DraggingTool then CurrentHotbar[k] = nil end end
+					local idx = table.find(InventoryTools, DraggingTool)
+					if idx then table.remove(InventoryTools, idx) end
+
+					local old = CurrentHotbar[i]
+					if old then table.insert(InventoryTools, old) end
+					CurrentHotbar[i] = DraggingTool
+					UpdateHotbar()
+					EndDrag()
+					return
+				end
+			end
+		end
+
+		local invPos = InventoryFrame.AbsolutePosition
+		local invSize = InventoryFrame.AbsoluteSize
+		if mousePos.X >= invPos.X and mousePos.X <= invPos.X + invSize.X and mousePos.Y >= invPos.Y and mousePos.Y <= invPos.Y + invSize.Y then
+			for k, v in pairs(CurrentHotbar) do if v == DraggingTool then CurrentHotbar[k] = nil end end
+			if not table.find(InventoryTools, DraggingTool) then table.insert(InventoryTools, DraggingTool) end
+		end
+		UpdateHotbar()
+		EndDrag()
+	end)
+	table.insert(TrackingRefs, DragEndConnection)
+
+	local DEBUG_AMMO_PRINTS = false
+
+	local lastAmmoDebugPrint = 0
+
+	local AmmoLoopConnection = RunService.Heartbeat:Connect(function()
+		local debugTick = false
+		if DEBUG_AMMO_PRINTS and os.clock() - lastAmmoDebugPrint > 1 then
+			lastAmmoDebugPrint = os.clock()
+			debugTick = true
+		end
+
+		if HotbarFrame then
+			for i = 1, 5 do
+				local slot = HotbarFrame:FindFirstChild("Slot" .. i) :: Frame?
+				if slot then
+					local tool = ResolveLiveTool(CurrentHotbar[i])
+					if debugTick and tool then
+						print(string.format(
+							"[AmmoDebug] hotbar slot %d: tool=%s parent=%s CurrentAmmo=%s Local_CurrentAmmo=%s",
+							i,
+							tool.Name,
+							tool.Parent and tool.Parent.Name or "nil",
+							tostring(tool:GetAttribute("CurrentAmmo")),
+							tostring(tool:GetAttribute("Local_CurrentAmmo"))
+							))
+					end
+					local ok, err = pcall(UpdateSlotAmmo, slot, tool)
+					if not ok then
+						warn("[Inventory] ammo update failed for hotbar slot " .. i .. ": " .. tostring(err))
+					end
+				end
+			end
+		end
+
+		if InventorySlotsFrame then
+			for i = 1, 5 do
+				local slot = InventorySlotsFrame:FindFirstChild("Slot" .. i) :: Frame?
+				if slot then
+					local tool = ResolveLiveTool(InventoryTools[i])
+					if debugTick and tool then
+						print(string.format(
+							"[AmmoDebug] inventory slot %d: tool=%s parent=%s CurrentAmmo=%s Local_CurrentAmmo=%s",
+							i,
+							tool.Name,
+							tool.Parent and tool.Parent.Name or "nil",
+							tostring(tool:GetAttribute("CurrentAmmo")),
+							tostring(tool:GetAttribute("Local_CurrentAmmo"))
+							))
+					end
+					local ok, err = pcall(UpdateSlotAmmo, slot, tool)
+					if not ok then
+						warn("[Inventory] ammo update failed for inventory slot " .. i .. ": " .. tostring(err))
+					end
+				end
+			end
+		end
+	end)
+	table.insert(TrackingRefs, AmmoLoopConnection)
+
+	local RenderConnection = RunService.RenderStepped:Connect(function()
+		if DragFrame then
+			local pos = UserInputService:GetMouseLocation()
+			DragFrame.Position = UDim2.fromOffset(pos.X, pos.Y)
+		end
+
+		if HotbarFrame and not AmoLabel then
+			AmoLabel = Instance.new("TextLabel")
+			AmoLabel.Name = "AmoLabel"
+			AmoLabel.Size = UDim2.new(1, 0, 0.35, 0)
+			AmoLabel.Position = UDim2.new(0, 0, -1, 0)
+			AmoLabel.BackgroundTransparency = 1
+			AmoLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+			AmoLabel.Font = Enum.Font.Arimo
+			AmoLabel.TextScaled = true
+			AmoLabel.TextXAlignment = Enum.TextXAlignment.Right
+			AmoLabel.Parent = HotbarFrame
+		end
+
+		if not Hud then
+			local Home = Player.PlayerGui:FindFirstChild("Home")
+			local actualHud = Home and Home:FindFirstChild("hud")
+			if actualHud then Hud = actualHud :: Frame end
+		end
+
+		if Character and AmoLabel then
+			local Tool = Character:FindFirstChildWhichIsA("Tool")
+			if Tool then
+				AmoLabel.Visible = true
+				if Hud then
+					local bFrame = Hud:FindFirstChild("BottomRightFrame") :: Frame?
+					if bFrame then bFrame.Visible = false end
+				end
+				local current = Tool:GetAttribute("Local_CurrentAmmo") or Tool:GetAttribute("Local_CurrentAmo")
+				local max = Tool:GetAttribute("MaxAmmo") or Tool:GetAttribute("MaxAmo")
+				AmoLabel.Text = (current and max) and (tostring(current) .. " | " .. tostring(max)) or ""
+			else
+				if Hud then
+					local bFrame = Hud:FindFirstChild("BottomRightFrame") :: Frame?
+					if bFrame then bFrame.Visible = true end
+				end
+				AmoLabel.Visible = false
+			end
+		end
+
+	end)
+	table.insert(TrackingRefs, RenderConnection)
+
+	local function SetupCharacter(char: Model)
+		Character = char
+		Backpack = Player:WaitForChild("Backpack") :: Backpack
+
+		CleanConnections()
+		table.clear(InventoryTools)
+		for i = 1, 5 do CurrentHotbar[i] = nil end
+
+		for _, tool in ipairs(Backpack:GetChildren()) do if tool:IsA("Tool") then RegisterTool(tool) end end
+		for _, tool in ipairs(Character:GetChildren()) do if tool:IsA("Tool") then RegisterTool(tool) end end
+		UpdateHotbar()
+
+		table.insert(charConnections, Character.ChildAdded:Connect(function(c) if c:IsA("Tool") then RegisterTool(c); UpdateHotbar() end end))
+		table.insert(charConnections, Backpack.ChildAdded:Connect(function(c) if c:IsA("Tool") then RegisterTool(c); UpdateHotbar() end end))
+		table.insert(charConnections, Character.ChildRemoved:Connect(function(c) task.wait(); if c:IsA("Tool") and c.Parent ~= Character and c.Parent ~= Backpack then RemoveTool(c); UpdateHotbar() end end))
+		table.insert(charConnections, Backpack.ChildRemoved:Connect(function(c) task.wait(); if c:IsA("Tool") and c.Parent ~= Character and c.Parent ~= Backpack then RemoveTool(c); UpdateHotbar() end end))
+	end
+
+	local CharAddedConn = Player.CharacterAdded:Connect(SetupCharacter)
+	table.insert(TrackingRefs, CharAddedConn)
+	if Player.Character then SetupCharacter(Player.Character) end
+
+	while true do
+		StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
+		StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
+
+		ClientFramework.Heartbeats.Inventory = os.clock()
+		task.wait(1)
+	end
+end
+
+ClientFramework.Modules.Hitmarker = function()
+	ClientFramework.ActiveUI.Hitmarker = ClientFramework.ActiveUI.Hitmarker or {}
+	local TrackingRefs = ClientFramework.ActiveUI.Hitmarker
+
+	local TargetParent: Instance
+	if gethui then
+		TargetParent = gethui()
+	elseif RunService:IsStudio() then
+		TargetParent = Player:WaitForChild("PlayerGui")
+	else
+		TargetParent = game:GetService("CoreGui")
+	end
+
+	local GlobalFeed = ReplicatedStorage:WaitForChild("Killfeed") :: Folder
+
+	local VOLUME = 0.85
+	local KillSounds = {
+		"rbxasset://sounds/Elimination1.mp3",
+		"rbxasset://sounds/Elimination2.mp3",
+		"rbxasset://sounds/Elimination3.mp3",
+		"rbxasset://sounds/Elimination4.mp3",
+		"rbxasset://sounds/Elimination5.mp3",
+		"rbxasset://sounds/Elimination6.mp3",
+		"rbxasset://sounds/Elimination7.mp3",
+		"rbxasset://sounds/Elimination8.mp3",
+		"rbxasset://sounds/Elimination9.mp3",
+		"rbxasset://sounds/Elimination10.mp3"
+	}
+
+	local HitSounds = {
+		"rbxasset://sounds/Hit1.mp3",
+		"rbxasset://sounds/Hit2.mp3",
+		"rbxasset://sounds/Hit3.mp3"
+	}
+
+	local SheildHitSounds = {
+		"rbxasset://sounds/SheildHit1.mp3",
+		"rbxasset://sounds/SheildHit2.mp3",
+		"rbxasset://sounds/SheildHit3.mp3",
+		"rbxasset://sounds/SheildHit4.mp3"
+	}
+
+	local SheildCrackSounds = {
+		"rbxasset://sounds/sheildbreak.mp3",
+		"rbxasset://sounds/sheildbreak2.mp3"
+	}
+
+	local function PlaySound(soundId: string, volume: number)
+		local sound = Instance.new("Sound")
+		sound.SoundId = soundId
+		sound.Volume = volume or VOLUME
+		sound.Parent = TargetParent
+		sound:Play()
+
+		sound.Ended:Connect(function()
+			sound:Destroy()
+		end)
+		Debris:AddItem(sound, 5)
+	end
+
+	local lastHealth = {}
+	local eliminatedPlayers = {}
+	local shieldBroken = {}
+	local recentTargets = {}
+	local feedVersion = 0
+	local activeTweenIn
+	local activeTweenOut
+	local lastShotTime = 0
+
+	local CharConn = Player.CharacterAdded:Connect(function()
+		lastHealth = {}
+		eliminatedPlayers = {}
+		shieldBroken = {}
+		recentTargets = {}
+	end)
+	table.insert(TrackingRefs, CharConn)
+
+	local HitmarkerGui = Instance.new("ScreenGui") :: ScreenGui
+	HitmarkerGui.Name = "HitmarkerGui"
+	HitmarkerGui.DisplayOrder = 10
+	HitmarkerGui.ResetOnSpawn = false
+	HitmarkerGui.Parent = TargetParent
+	table.insert(TrackingRefs, HitmarkerGui)
+
+	local KillFeedLabel = Instance.new("TextLabel")
+	KillFeedLabel.Name = "EliminatedLabel"
+	KillFeedLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+	KillFeedLabel.Size = UDim2.new(0.55, 0, 0, 50)
+	KillFeedLabel.Position = UDim2.new(0.5, 0, 0.65, 0)
+	KillFeedLabel.BackgroundTransparency = 1
+	KillFeedLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	KillFeedLabel.TextStrokeTransparency = 1
+	KillFeedLabel.TextTransparency = 1
+	KillFeedLabel.Font = Enum.Font.ArimoBold
+	KillFeedLabel.TextSize = 25
+	KillFeedLabel.RichText = true
+	KillFeedLabel.Parent = HitmarkerGui
+
+	local function ShowKillFeed(victimName: string)
+		feedVersion += 1
+		local myVersion = feedVersion
+
+		if activeTweenIn then activeTweenIn:Cancel() end
+		if activeTweenOut then activeTweenOut:Cancel() end
+
+		KillFeedLabel.Text =
+			'<font color="rgb(255,255,255)">ELIMINATED: </font>' ..
+			'<font color="rgb(255,60,60)"><b>' .. string.upper(victimName) .. '</b></font>'
+
+		KillFeedLabel.TextTransparency = 1
+		KillFeedLabel.TextStrokeTransparency = 1
+
+		activeTweenIn = TweenService:Create(KillFeedLabel, TweenInfo.new(0.2), {
+			TextTransparency = 0,
+			TextStrokeTransparency = 0.5
+		})
+		activeTweenIn:Play()
+
+		task.delay(2, function()
+			if myVersion ~= feedVersion then return end
+
+			activeTweenOut = TweenService:Create(KillFeedLabel, TweenInfo.new(0.25), {
+				TextTransparency = 1,
+				TextStrokeTransparency = 1,
+			})
+			activeTweenOut:Play()
+		end)
+	end
+
+	local function CreatePopUp(targetPart: Instance, damageAmount: number, colorType: string?)
+		if not targetPart or damageAmount <= 0 then return end
+
+		local damageString = tostring(math.floor(damageAmount))
+		local finalColor = Color3.fromRGB(255, 255, 255)
+
+		if colorType == "Shield" then 
+			finalColor = Color3.fromRGB(0, 170, 255)
+		elseif colorType == "Kill" then 
+			finalColor = Color3.fromRGB(232, 215, 23) 
+		end
+
+		local billboard = Instance.new("BillboardGui")
+		billboard.Size = UDim2.new(0, 400, 0, 300)
+		billboard.AlwaysOnTop = true
+		billboard.Adornee = targetPart
+		billboard.Parent = targetPart
+		billboard.StudsOffset = Vector3.new(-3.5, 3.5, 0)
+
+		local labels = {}
+		local digitCount = #damageString
+		local spacing = 28
+		local totalWidth = digitCount * spacing
+
+		for i = 1, digitCount do
+			local label = Instance.new("TextLabel")
+			label.Text = damageString:sub(i, i)
+			label.Font = Enum.Font.LuckiestGuy
+			label.TextSize = 35
+			label.TextScaled = false
+			label.TextColor3 = finalColor
+			label.TextStrokeTransparency = 0
+			label.BackgroundTransparency = 1
+
+			local x = (i - 1) * spacing - (totalWidth / 2) + (spacing / 2)
+			label.Position = UDim2.new(0.5, x, 0.5, 0)
+			label.Size = UDim2.new(0, 35, 0, 50)
+
+			label.Parent = billboard
+			table.insert(labels, label)
+		end
+
+		task.spawn(function()
+			TweenService:Create(
+				billboard,
+				TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.In),{
+					Size = UDim2.new(0, 300, 0, 200),
+					StudsOffset = Vector3.new(0, 2, 0)
+				}
+			):Play()
+
+			for _, label in ipairs(labels) do
+				TweenService:Create(
+					label,
+					TweenInfo.new(0.35, Enum.EasingStyle.Linear),
+					{Size = UDim2.new(0, 25, 0, 50)}
+				):Play()
+			end
+
+			local gravity = 0.77
+			local baseRotSpeed = 5
+			local motions = {}
+
+			for i, label in ipairs(labels) do
+				local mid = (digitCount + 1) / 2
+				local isRightSide = i > mid
+
+				motions[label] = {
+					velX = isRightSide and math.random(6, 10)/100 or math.random(-10, -6)/100,
+					rotSpeed = (isRightSide and 1 or -1) * baseRotSpeed
+				}
+			end
+
+			task.wait(0.4)
+
+			for frame = 1, 55 do
+				for _, label in ipairs(labels) do
+					local motion = motions[label]
+					label.Position = label.Position + UDim2.new(0, motion.velX * 100, 0, 5 + gravity)
+					label.Rotation = label.Rotation + motion.rotSpeed
+
+					local t = frame / 15
+					local scale = (1 - t)^2
+					label.Size = UDim2.new(0, 25 * scale, 0, 50 * scale)
+
+					local fade = math.clamp(t, 0, 1)
+					label.TextTransparency = fade
+					label.TextStrokeTransparency = fade
+				end
+				RunService.RenderStepped:Wait()
+			end
+
+			billboard:Destroy()
+		end)
+	end
+
+	local FeedConnection = GlobalFeed.ChildAdded:Connect(function(child: Instance)
+		local feedText = child.Name
+		local myUser = Player.Name
+
+		local killerUser, victimUser = string.match(feedText, "^.-%s*%(%@([%w_]+)%)%s+killed%s+([%w_]+)")
+
+		if killerUser and string.lower(killerUser) == string.lower(myUser) then
+			if victimUser then
+				ShowKillFeed(victimUser)
+			end
+		end
+	end)
+	table.insert(TrackingRefs, FeedConnection)
+
+	local function ProcessMouseTarget()
+		local char = Player.Character
+		if not char then return end
+
+		local Mouse = Player:GetMouse()
+		local target = Mouse.Target
+
+		if target and target.Parent then
+			local enemyModel = target:FindFirstAncestorOfClass("Model")
+			local hum = enemyModel and enemyModel:FindFirstChildOfClass("Humanoid")
+
+			if hum and hum.Health > 0 and enemyModel ~= char then
+				if not lastHealth[enemyModel] then
+					lastHealth[enemyModel] = hum.Health
+				end
+
+				recentTargets[enemyModel] = {
+					Hum = hum,
+					Part = target,
+					LastSeen = tick()
+				}
+			end
+		end
+	end
+
+	local RenderConnection = RunService.RenderStepped:Connect(function()
+		local char = Player.Character
+		if not char then return end
+
+		local Mouse = Player:GetMouse()
+		local tool = char:FindFirstChildOfClass("Tool")
+
+		if tool then
+			Mouse.TargetFilter = tool
+		else
+			Mouse.TargetFilter = char
+		end
+
+		local isShooting = tool and tool:GetAttribute("Local_IsShooting")
+
+		if isShooting then
+			lastShotTime = tick()
+			ProcessMouseTarget()
+		end
+
+		if tick() - lastShotTime > 1.5 and not isShooting then
+			if next(recentTargets) ~= nil then recentTargets = {} end
+			return 
+		end
+
+		for enemyModel, data in pairs(recentTargets) do
+			local hum = data.Hum
+			local part = data.Part
+			local currentHP = hum.Health
+			local previousHP = lastHealth[enemyModel] or currentHP
+
+			if currentHP < previousHP then
+				local damage = previousHP - currentHP
+				local isDead = (currentHP <= 0)
+
+				if isDead and not eliminatedPlayers[enemyModel] then
+					eliminatedPlayers[enemyModel] = true
+					local chosenSound = KillSounds[math.random(1, #KillSounds)]
+					local calcVolume = 1
+
+					if chosenSound == "rbxasset://sounds/Elimination3.mp3" then
+						calcVolume = 0.5
+					elseif table.find({"rbxasset://sounds/Elimination5.mp3", "rbxasset://sounds/Elimination7.mp3", "rbxasset://sounds/Elimination10.mp3"}, chosenSound) then	
+						calcVolume = 0.15
+					elseif table.find({"rbxasset://sounds/Elimination6.mp3", "rbxasset://sounds/Elimination8.mp3", "rbxasset://sounds/Elimination4.mp3"}, chosenSound) then	
+						calcVolume = 2.5
+					elseif chosenSound == "rbxasset://sounds/Elimination1.mp3" then
+						calcVolume = 7
+					end
+
+					PlaySound(chosenSound, calcVolume)
+					CreatePopUp(part, damage, "Kill")
+
+					recentTargets[enemyModel] = nil
+					lastHealth[enemyModel] = nil
+				elseif not eliminatedPlayers[enemyModel] then
+					if currentHP > 50 then
+						local chosenSound = SheildHitSounds[math.random(1, #SheildHitSounds)]
+						local calcVolume = (chosenSound == "rbxasset://sounds/SheildHit4.mp3") and 0.75 or 5
+						PlaySound(chosenSound, calcVolume)
+						CreatePopUp(part, damage, "Shield")
+					elseif previousHP > 50 and currentHP <= 50 and not shieldBroken[enemyModel] then
+						shieldBroken[enemyModel] = true
+						local chosenSound = SheildCrackSounds[math.random(1, #SheildCrackSounds)]
+						PlaySound(chosenSound, 0.75)
+						CreatePopUp(part, damage, "Shield")
+					else
+						local chosenSound = HitSounds[math.random(1, #HitSounds)]
+						local calcVolume = 10
+						if chosenSound == "rbxasset://sounds/Hit3.mp3" then calcVolume = 0.75
+						elseif chosenSound == "rbxasset://sounds/Hit2.mp3" then calcVolume = 2.5 end
+
+						PlaySound(chosenSound, calcVolume)
+						CreatePopUp(part, damage)
+					end
+				end
+			end
+
+			lastHealth[enemyModel] = currentHP
+
+			if tick() - data.LastSeen > 2.0 then
+				recentTargets[enemyModel] = nil
+				lastHealth[enemyModel] = nil
+			end
+		end
+	end)
+	table.insert(TrackingRefs, RenderConnection)
+
+	while true do
+		ClientFramework.Heartbeats.Hitmarker = os.clock()
+		task.wait(1)
+	end
+end
+
+ClientFramework.Modules.AntiFling = function()
+	ClientFramework.ActiveUI.AntiFling = ClientFramework.ActiveUI.AntiFling or {}
+	local TrackingRefs = ClientFramework.ActiveUI.AntiFling
+
+	local OriginalCollisions = {}
+	local CarConnectionsMap = {}
+	local GlobalConnections = {}
+
+	local CarContainer = Workspace:WaitForChild("CarContainer")
+
+	local function restorePart(part: Instance)
+		if part:IsA("BasePart") and OriginalCollisions[part] ~= nil then
+			part.CanCollide = OriginalCollisions[part].CanCollide
+			part.CanTouch = OriginalCollisions[part].CanTouch
+			OriginalCollisions[part] = nil
+		end
+	end
+
+	local function clearCarTracking(car: Instance)
+		
+		if CarConnectionsMap[car] then
+			for _, conn in ipairs(CarConnectionsMap[car]) do
+				conn:Disconnect()
+			end
+			CarConnectionsMap[car] = nil
+		end
+
+		for _, descendant in ipairs(car:GetDescendants()) do
+			restorePart(descendant)
+		end
+	end
+
+	local function defusePart(part: Instance)
+		if part:IsA("BasePart") then
+			if OriginalCollisions[part] == nil then
+				OriginalCollisions[part] = {
+					CanCollide = part.CanCollide,
+					CanTouch = part.CanTouch
+				}
+			end
+
+			part.CanCollide = false
+			part.CanTouch = false
+		end
+	end
+
+	local function defuseCar(car: Instance)
+		if CarConnectionsMap[car] then return end
+		CarConnectionsMap[car] = {}
+
+		for _, descendant in ipairs(car:GetDescendants()) do
+			defusePart(descendant)
+		end
+
+		local descendantConn = car.DescendantAdded:Connect(defusePart)
+		table.insert(CarConnectionsMap[car], descendantConn)
+
+		local ancestryConn
+		ancestryConn = car.AncestryChanged:Connect(function(_, parent)
+			if not parent or not car:IsDescendantOf(Workspace) then
+				clearCarTracking(car)
+			end
+		end)
+		table.insert(CarConnectionsMap[car], ancestryConn)
+	end
+
+	local function disableAntiFling()
+		
+		for car, _ in pairs(CarConnectionsMap) do
+			clearCarTracking(car)
+		end
+		table.clear(CarConnectionsMap)
+
+		for part, _ in pairs(OriginalCollisions) do
+			restorePart(part)
+		end
+		table.clear(OriginalCollisions)
+	end
+
+	local childAddedConn = CarContainer.ChildAdded:Connect(function(car)
+		if GlobalSettings.AntiFling then
+			defuseCar(car)
+		end
+	end)
+	table.insert(GlobalConnections, childAddedConn)
+
+	local RenderConnection = RunService.RenderStepped:Connect(function()
+		if GlobalSettings.AntiFling then
+			for _, car in ipairs(CarContainer:GetChildren()) do
+				defuseCar(car)
+			end
+		else
+			if next(OriginalCollisions) ~= nil or next(CarConnectionsMap) ~= nil then
+				disableAntiFling()
+			end
+		end
+	end)
+	table.insert(GlobalConnections, RenderConnection)
+
+	for _, conn in ipairs(GlobalConnections) do
+		table.insert(TrackingRefs, conn)
+	end
+
+	while true do
+		ClientFramework.Heartbeats.AntiFling = os.clock()
+		task.wait(1)
+	end
+end
+
+-- This functionality is deprecated and will no longer be maintained.
+ClientFramework.Modules.EmoteWheel = function()
+
+	warn("EmoteWheel module is deprecated and will no longer be maintained, please use roblox's native emote wheel instead.")
+
+	local ALLOW_MOVEMENT_DURING_EMOTE = false
+
+
+	local Players = game:GetService("Players")
+	local UserInputService = game:GetService("UserInputService")
+	local RunService = game:GetService("RunService")
+	local TweenService = game:GetService("TweenService")
+
+	local LocalPlayer = Players.LocalPlayer :: Player
+	local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+	local Humanoid = Character:WaitForChild("Humanoid") :: Humanoid
+
+	local currentSound: Sound? = nil
+	local customAnimConnection: RBXScriptConnection? = nil 
+	local isOpen = false
+	local moveConn: RBXScriptConnection? = nil
+	local currentlyHoveredEmote = nil
+
+	local function getPoses(poseList, folder)
+		folder = folder or {}
+		for _, pose in ipairs(poseList) do
+			if pose:IsA("Pose") then
+				folder[pose.Name] = pose.CFrame
+				local subPoses = pose:GetChildren()
+				if #subPoses > 0 then
+					getPoses(subPoses, folder)
+				end
+			end
+		end
+		return folder
+	end
+
+	local function findMotor(partName)
+		for _, descendant in ipairs(Character:GetDescendants()) do
+			if descendant:IsA("Motor6D") and descendant.Part1 and descendant.Part1.Name == partName then
+				return descendant
+			end
+		end
+		return nil
+	end
+
+	local function StopCurrentEmote()
+		if customAnimConnection then
+			customAnimConnection:Disconnect()
+			customAnimConnection = nil
+		end
+
+		if currentSound then
+			local oldSound = currentSound
+			currentSound = nil
+
+			TweenService:Create(oldSound, TweenInfo.new(0.5), {Volume = 0}):Play()
+			task.delay(1, function() 
+				if oldSound then oldSound:Destroy() end 
+			end)
+		end
+	end
+
+	local EmoteDatabase = {
+		[1] = { Name = "Zany", CustomFile = "Animations/Zany.rbxm", Icon = "rbxassetid://102754860575266", SoundId = "rbxasset://sounds/EmoteSounds/Zany.ogg", Looped = true },
+		[2] = { Name = "Dance Moves", CustomFile = "Animations/Dance_Moves.rbxm", Icon = "rbxassetid://80542755544719", SoundId = "rbxasset://sounds/EmoteSounds/Dance_Moves.ogg", Looped = false },
+	}
+
+	local function ConnectMovementCancel(targetHumanoid: Humanoid)
+		if moveConn then moveConn:Disconnect() end
+		if ALLOW_MOVEMENT_DURING_EMOTE then return end
+
+		local rootPart = targetHumanoid.RootPart or Character:WaitForChild("HumanoidRootPart", 5)
+		if not rootPart then return end
+
+		moveConn = RunService.Heartbeat:Connect(function()
+			if not customAnimConnection then return end
+
+			local horizontalVelocity = Vector3.new(rootPart.AssemblyLinearVelocity.X, 0, rootPart.AssemblyLinearVelocity.Z)
+			local movementThreshold = 0
+
+			if horizontalVelocity.Magnitude > movementThreshold or targetHumanoid.MoveDirection.Magnitude > 0.1 then
+				StopCurrentEmote()
+			end
+		end)
+	end
+
+	local function PlayCustomOptimized(fileData: any)
+		local localAssetPath = getcustomasset(fileData.CustomFile)
+		local success, loadedObjects = pcall(function()
+			return game:GetObjects(localAssetPath)
+		end)
+
+		if not success or not loadedObjects or #loadedObjects == 0 then
+			warn("Failed to read file! Make sure your executor workspace contains: " .. tostring(fileData.CustomFile))
+			return nil
+		end
+
+		local sequence = loadedObjects[1]
+		if not sequence:IsA("KeyframeSequence") then
+			warn("The loaded file must be a KeyframeSequence.")
+			sequence:Destroy()
+			return nil
+		end
+
+		local cachedTimeline = {}
+		local motorCache = {}
+
+		local rawKeyframes = sequence:GetKeyframes()
+		table.sort(rawKeyframes, function(a, b) return a.Time < b.Time end)
+
+		for _, kf in ipairs(rawKeyframes) do
+			local framePoses = getPoses(kf:GetChildren())
+
+			table.insert(cachedTimeline, {
+				Time = kf.Time,
+				Poses = framePoses
+			})
+
+			for partName in pairs(framePoses) do
+				if not motorCache[partName] then
+					motorCache[partName] = findMotor(partName)
+				end
+			end
+		end
+
+		local animationLength = cachedTimeline[#cachedTimeline].Time
+		sequence:Destroy()
+
+		local startTime = os.clock()
+
+		local connection
+		connection = RunService.PreSimulation:Connect(function()
+			local elapsed = os.clock() - startTime
+
+			if not fileData.Looped and elapsed >= animationLength then
+				StopCurrentEmote()
+				return
+			end
+
+			local currentTime = elapsed % animationLength
+
+			local frameA = cachedTimeline[1]
+			local frameB = cachedTimeline[#cachedTimeline]
+
+			for i = 1, #cachedTimeline - 1 do
+				if currentTime >= cachedTimeline[i].Time and currentTime <= cachedTimeline[i + 1].Time then
+					frameA = cachedTimeline[i]
+					frameB = cachedTimeline[i + 1]
+					break
+				end
+			end
+
+			local timeDelta = frameB.Time - frameA.Time
+			local alpha = (timeDelta > 0) and ((currentTime - frameA.Time) / timeDelta) or 0
+
+			for partName, motor in pairs(motorCache) do
+				if motor then
+					local cframeA = frameA.Poses[partName]
+
+					if not cframeA then
+						for i = #cachedTimeline, 1, -1 do
+							if cachedTimeline[i].Time <= currentTime and cachedTimeline[i].Poses[partName] then
+								cframeA = cachedTimeline[i].Poses[partName]
+								break
+							end
+						end
+					end
+
+					local cframeB = frameB.Poses[partName] or cframeA
+					if not frameB.Poses[partName] then
+						for i = 1, #cachedTimeline do
+							if cachedTimeline[i].Time > currentTime and cachedTimeline[i].Poses[partName] then
+								cframeB = cachedTimeline[i].Poses[partName]
+								break
+							end
+						end
+					end
+
+					if cframeA and cframeB then
+						motor.Transform = cframeA:Lerp(cframeB, alpha)
+					end
+				end
+			end
+		end)
+
+		return connection
+	end
+
+	local function PlayEmote(emoteData: any)
+		if not Humanoid or not Humanoid:IsDescendantOf(workspace) then return end
+
+		StopCurrentEmote()
+
+		local localSound: Sound? = nil
+		if emoteData.SoundId and emoteData.SoundId ~= "" then
+			local targetRoot = Humanoid.RootPart
+			if targetRoot then
+				local sound = Instance.new("Sound")
+				sound.Name = "EmoteAudioSource"
+				sound.SoundId = emoteData.SoundId
+				sound.Volume = 0.2
+
+				if emoteData.Looped then			
+					sound.Looped = true
+				end	
+				sound.Parent = targetRoot
+				sound:Play()
+
+				currentSound = sound
+				localSound = sound
+			end
+		end
+
+		if emoteData.CustomFile and emoteData.CustomFile ~= "" then
+			customAnimConnection = PlayCustomOptimized(emoteData)
+		end
+	end
+
+	local TargetGuiParent = LocalPlayer.PlayerGui
+
+	local ScreenGui = Instance.new("ScreenGui")
+	ScreenGui.Name = "FrameworkEmoteWheel"
+	ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	ScreenGui.Parent = TargetGuiParent
+
+	local MainFrame = Instance.new("Frame")
+	MainFrame.Name = "Main"
+	MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+	MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+	MainFrame.Size = UDim2.new(0.4, 0, 0.4, 0)
+	MainFrame.BackgroundTransparency = 1
+	MainFrame.Visible = false
+	MainFrame.Parent = ScreenGui
+
+	local AspectConstraint = Instance.new("UIAspectRatioConstraint")
+	AspectConstraint.AspectRatio = 1
+	AspectConstraint.Parent = MainFrame
+
+	local SizeConstraint = Instance.new("UISizeConstraint")
+	SizeConstraint.MinSize = Vector2.new(200, 200)
+	SizeConstraint.MaxSize = Vector2.new(350, 350)
+	SizeConstraint.Parent = MainFrame
+
+	local BackgroundImage = Instance.new("ImageLabel")
+	BackgroundImage.Name = "BackgroundImage"
+	BackgroundImage.Size = UDim2.new(1, 0, 1, 0)
+	BackgroundImage.BackgroundTransparency = 0.3
+	BackgroundImage.ZIndex = 1
+	BackgroundImage.Image = ""
+	BackgroundImage.BackgroundColor3 = Color3.new(0.0313726, 0.141176, 0.4)
+	BackgroundImage.ImageTransparency = 1
+	BackgroundImage.Parent = MainFrame
+
+	local RoundingCorner = Instance.new("UICorner")
+	RoundingCorner.CornerRadius = UDim.new(0.5, 0)
+	RoundingCorner.Parent = BackgroundImage
+
+	local InnerShadow = Instance.new("UIShadow")
+	InnerShadow.BlurRadius = UDim.new(0.1, 0)
+	InnerShadow.Color = BackgroundImage.BackgroundColor3
+	InnerShadow.Transparency = 0.5
+	InnerShadow.Name = "InnerShadow"
+	InnerShadow.Parent = BackgroundImage
+
+	local OuterShadow = Instance.new("UIShadow")
+	OuterShadow.BlurRadius = UDim.new(1, 0)
+	OuterShadow.Color = Color3.new(0, 0, 0)
+	OuterShadow.Spread = UDim2.new(1, 0, 1, 0)
+	OuterShadow.Transparency = 0.5
+	OuterShadow.Name = "OuterShadow"
+	OuterShadow.Parent = BackgroundImage
+
+	local Frame = Instance.new("Frame")
+	Frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	Frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+	Frame.Size = UDim2.new(0.35, 0, 0.35, 0)
+	Frame.BackgroundColor3 = Color3.fromRGB(4, 16, 45)
+	Frame.Parent = BackgroundImage
+
+	local RoundingCorner = Instance.new("UICorner")
+	RoundingCorner.CornerRadius = UDim.new(0.5, 0)
+	RoundingCorner.Parent = Frame
+
+	local OuterShadow = Instance.new("UIShadow")
+	OuterShadow.BlurRadius = UDim.new(0.5, 0)
+	OuterShadow.Color = Frame.BackgroundColor3
+	OuterShadow.Spread = UDim2.new(0.5, 0, 0.5, 0)
+	OuterShadow.Transparency = 0.75
+	OuterShadow.Name = "OuterShadow"
+	OuterShadow.Parent = Frame
+
+	local CentralText = Instance.new("TextLabel")
+	CentralText.Name = "MiddleText"
+	CentralText.AnchorPoint = Vector2.new(0.5, 0.5)
+	CentralText.Position = UDim2.new(0.5, 0, 0.5, 0)
+	CentralText.Size = UDim2.new(0.6, 0, 0.4, 0)
+	CentralText.BackgroundTransparency = 1
+	CentralText.ZIndex = 5
+	CentralText.Font = Enum.Font.BuilderSans
+	CentralText.Text = "Select Emote"
+	CentralText.TextColor3 = Color3.new(1, 1, 1)
+	CentralText.TextScaled = true
+	CentralText.Parent = Frame
+
+	ConnectMovementCancel(Humanoid)
+
+	local radius = 0.35 
+	for index = 1, #EmoteDatabase do
+		local data = EmoteDatabase[index]
+		if not data then continue end
+
+		local angle = ((index - 1) / 8) * (2 * math.pi) - (math.pi / 2)
+		local posX = 0.5 + (math.cos(angle) * radius)
+		local posY = 0.5 + (math.sin(angle) * radius)
+
+		local Button = Instance.new("ImageButton")
+		Button.Name = tostring(index)
+		Button.AnchorPoint = Vector2.new(0.5, 0.5)
+		Button.Position = UDim2.new(posX, 0, posY, 0)
+		Button.Size = UDim2.new(0.16, 0, 0.16, 0)
+		Button.BackgroundTransparency = 1
+		Button.ZIndex = 4
+		Button.Image = data.Icon
+		Button.ImageColor3 = Color3.fromRGB(200, 200, 200)
+		Button.Parent = MainFrame
+
+		local UIAspect = Instance.new("UIAspectRatioConstraint")
+		UIAspect.AspectRatio = 1
+		UIAspect.Parent = Button
+
+		local Label = Instance.new("TextLabel")
+		Label.Name = "SlotLabel"
+		Label.AnchorPoint = Vector2.new(0.5, 0)
+		Label.Position = UDim2.new(0.5, 0, 1, 2)
+		Label.Size = UDim2.new(1.5, 0, 0.25, 0)
+		Label.BackgroundTransparency = 1
+		Label.Font = Enum.Font.BuilderSans
+		Label.Text = data.Name
+		Label.TextColor3 = Color3.new(1, 1, 1)
+		Label.TextScaled = true
+		Label.ZIndex = 5
+		Label.Parent = Button
+
+		Button.MouseEnter:Connect(function()
+			currentlyHoveredEmote = data
+			CentralText.Text = data.Name
+			TweenService:Create(Label, TweenInfo.new(0.15), {TextColor3 = Color3.fromRGB(255, 226, 2)}):Play()
+			TweenService:Create(Button, TweenInfo.new(0.15), {ImageColor3 = Color3.fromRGB(255, 255, 255)}):Play()
+			TweenService:Create(Button, TweenInfo.new(0.15), {Size = UDim2.new(0.175, 0, 0.175, 0)}):Play()
+		end)
+
+		Button.MouseLeave:Connect(function()
+			if currentlyHoveredEmote == data then
+				currentlyHoveredEmote = nil
+			end
+			CentralText.Text = "Select Emote"
+			TweenService:Create(Label, TweenInfo.new(0.15), {TextColor3 = Color3.fromRGB(255, 255, 255)}):Play()
+			TweenService:Create(Button, TweenInfo.new(0.15), {ImageColor3 = Color3.fromRGB(200, 200, 200)}):Play()
+			TweenService:Create(Button, TweenInfo.new(0.15), {Size = UDim2.new(0.16, 0, 0.16, 0)}):Play()
+		end)
+
+		Button.MouseButton1Down:Connect(function()
+			PlayEmote(data)
+			isOpen = false
+			MainFrame.Visible = false
+		end)
+	end
+
+	local InputBeganConn = UserInputService.InputBegan:Connect(function(input, processed)
+		if processed then return end
+		if input.KeyCode == Enum.KeyCode.B then
+			isOpen = true
+			MainFrame.Visible = true
+		end
+	end)
+
+	local InputEndedConn = UserInputService.InputEnded:Connect(function(input)
+		if input.KeyCode == Enum.KeyCode.B and isOpen then
+			isOpen = false
+			MainFrame.Visible = false
+
+			if currentlyHoveredEmote then
+				PlayEmote(currentlyHoveredEmote)
+			end
+		end
+	end)
+
+	local CharAddedConn = LocalPlayer.CharacterAdded:Connect(function(newChar)
+		Character = newChar
+		Humanoid = newChar:WaitForChild("Humanoid") :: Humanoid
+		StopCurrentEmote()
+		ConnectMovementCancel(Humanoid)
+	end)
+
+	ClientFramework.ActiveUI.EmoteWheel = ClientFramework.ActiveUI.EmoteWheel or {}
+	table.insert(ClientFramework.ActiveUI.EmoteWheel, ScreenGui)
+	table.insert(ClientFramework.ActiveUI.EmoteWheel, InputBeganConn)
+	table.insert(ClientFramework.ActiveUI.EmoteWheel, InputEndedConn)
+	table.insert(ClientFramework.ActiveUI.EmoteWheel, CharAddedConn)
+
+	while true do
+		ClientFramework.Heartbeats.EmoteWheel = os.clock()
+		task.wait(1)
+	end
+end
+
+
+warn("[FortClient] Deploying threads...")
+for moduleName, _ in pairs(ClientFramework.Modules) do
+	BootCompoment(moduleName)
+end
+
+task.spawn(function()
+	while true do
+		task.wait(5)
+		local currentTime = os.clock()
+
+		for moduleName, lastPulse in pairs(ClientFramework.Heartbeats) do
+			local timeSinceLastPulse = currentTime - lastPulse
+
+			if timeSinceLastPulse > TIMEOUT_THRESHOLD then
+				warn("[Watchdog CRITICAL] Module '" .. moduleName .. "' crashed? No response for " .. string.format("%.1f", timeSinceLastPulse) .. " seconds.")
+				RebootComponent(moduleName)
+			end
+		end
+	end
+end)
